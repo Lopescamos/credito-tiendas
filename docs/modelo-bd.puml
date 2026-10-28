@@ -1,0 +1,281 @@
+@startuml CreditoTiendasDB
+!theme plain
+skinparam linetype ortho
+skinparam classAttributeIconSize 0
+skinparam defaultFontSize 11
+
+title Modelo de Base de Datos — CreditoTiendasDB\n19 tablas · 6 módulos
+
+package "SEGURIDAD" #E8F5E9 {
+  entity "Rol" as rol {
+    * **id_rol** : INT <<PK>>
+    --
+    nombre : VARCHAR(30) <<UQ>>
+    descripcion : VARCHAR(100)
+    activo : BIT
+  }
+
+  entity "Usuario" as usuario {
+    * **id_usuario** : INT <<PK>>
+    --
+    correo : VARCHAR(100) <<UQ>>
+    nombre : VARCHAR(60)
+    apellido : VARCHAR(60)
+    contrasena_hash : VARCHAR(256)
+    id_rol : INT <<FK>>
+    activo : BIT
+    fecha_creacion : DATETIME
+  }
+
+  entity "Usuario_Tienda" as usuario_tienda {
+    * **id_usuario_tienda** : INT <<PK>>
+    --
+    id_usuario : INT <<FK>>
+    id_tienda : INT <<FK>>
+    fecha_asignacion : DATETIME
+    activo : BIT
+  }
+
+  entity "Log_Operacion" as log_op {
+    * **id_log** : BIGINT <<PK>>
+    --
+    id_usuario : INT <<FK>>
+    accion : VARCHAR(50)
+    entidad_afectada : VARCHAR(50)
+    id_entidad : INT
+    detalle : VARCHAR(500)
+    direccion_ip : VARCHAR(45)
+    fecha_hora : DATETIME
+  }
+}
+
+package "CONFIGURACIÓN" #E3F2FD {
+  entity "Tienda" as tienda {
+    * **id_tienda** : INT <<PK>>
+    --
+    ruc : VARCHAR(11) <<UQ>>
+    razon_social : VARCHAR(120)
+    nombre_comercial : VARCHAR(100)
+    direccion : VARCHAR(200)
+    telefono : VARCHAR(15)
+    activo : BIT
+    fecha_registro : DATETIME
+  }
+
+  entity "Moneda" as moneda {
+    * **id_moneda** : INT <<PK>>
+    --
+    codigo : VARCHAR(3) <<UQ>>
+    nombre : VARCHAR(30)
+    simbolo : VARCHAR(5)
+  }
+
+  entity "Unidad_Medida" as unidad {
+    * **id_unidad** : INT <<PK>>
+    --
+    nombre : VARCHAR(30) <<UQ>>
+    abreviatura : VARCHAR(10)
+  }
+}
+
+package "CATÁLOGO" #FFF3E0 {
+  entity "Producto_Servicio" as producto {
+    * **id_producto** : INT <<PK>>
+    --
+    id_tienda : INT <<FK>>
+    nombre : VARCHAR(100)
+    descripcion : VARCHAR(300)
+    tipo : VARCHAR(15)
+    proveedor : VARCHAR(100)
+    marca : VARCHAR(60)
+    id_unidad : INT <<FK>>
+    imagen_url : VARCHAR(500)
+    precio_contado : DECIMAL(12,2)
+    precio_credito : DECIMAL(12,2)
+    activo : BIT
+  }
+}
+
+package "CLIENTES" #F3E5F5 {
+  entity "Perfil_Credito_Cliente" as perfil {
+    * **id_perfil_credito** : INT <<PK>>
+    --
+    id_usuario : INT <<FK>>
+    id_tienda : INT <<FK>>
+    tasa_interes : DECIMAL(10,7)
+    tipo_tasa : VARCHAR(20)
+    periodo_capitalizacion : VARCHAR(20)
+    tasa_moratoria : DECIMAL(10,7)
+    tipo_tasa_moratoria : VARCHAR(20)
+    id_moneda : INT <<FK>>
+    limite_credito : DECIMAL(12,2)
+    plazo_maximo_dias : INT
+    dia_corte : INT
+    dia_pago : INT
+    activo : BIT
+    fecha_registro : DATETIME
+  }
+}
+
+package "TRANSACCIONES" #FFFDE7 {
+  entity "Venta_Credito" as venta {
+    * **id_venta** : INT <<PK>>
+    --
+    id_perfil_credito : INT <<FK>>
+    fecha_venta : DATETIME
+    monto_total : DECIMAL(12,2)
+    modalidad : VARCHAR(20)
+    plazo_dias : INT
+    dias_gracia : INT
+    numero_cuotas : INT
+    cuota_fija : DECIMAL(12,2)
+    capital_financiado : DECIMAL(12,2)
+    .. snapshot de tasas ..
+    tasa_interes_snapshot : DECIMAL(10,7)
+    tipo_tasa_snapshot : VARCHAR(20)
+    periodo_capitalizacion_snapshot : VARCHAR(20)
+    tasa_moratoria_snapshot : DECIMAL(10,7)
+    tipo_tasa_moratoria_snapshot : VARCHAR(20)
+    ..
+    estado : VARCHAR(20)
+    id_solicitud_origen : INT <<FK>> nullable
+  }
+
+  entity "Detalle_Venta" as det_venta {
+    * **id_detalle** : INT <<PK>>
+    --
+    id_venta : INT <<FK>>
+    id_producto : INT <<FK>>
+    cantidad : DECIMAL(10,2)
+    precio_unitario : DECIMAL(12,2)
+    subtotal : DECIMAL(12,2)
+  }
+
+  entity "Solicitud_Compra_Credito" as solicitud {
+    * **id_solicitud** : INT <<PK>>
+    --
+    id_perfil_credito : INT <<FK>>
+    fecha_solicitud : DATETIME
+    estado : VARCHAR(20)
+    motivo_rechazo : VARCHAR(300)
+    fecha_respuesta : DATETIME
+    id_venta_generada : INT <<FK>> nullable
+    monto_total : DECIMAL(12,2)
+  }
+
+  entity "Detalle_Solicitud" as det_solicitud {
+    * **id_detalle_solicitud** : INT <<PK>>
+    --
+    id_solicitud : INT <<FK>>
+    id_producto : INT <<FK>>
+    cantidad : DECIMAL(10,2)
+    precio_unitario : DECIMAL(12,2)
+    subtotal : DECIMAL(12,2)
+  }
+}
+
+package "FINANZAS" #FCE4EC {
+  entity "Cuota_Cronograma" as cuota {
+    * **id_cuota** : INT <<PK>>
+    --
+    id_venta : INT <<FK>>
+    numero_cuota : INT
+    fecha_vencimiento : DATE
+    capital : DECIMAL(12,2)
+    interes : DECIMAL(12,2)
+    cuota_fija : DECIMAL(12,2)
+    saldo_restante : DECIMAL(12,2)
+    estado : VARCHAR(20)
+    fecha_pago_real : DATE
+  }
+
+  entity "Cargo_Mora" as mora {
+    * **id_cargo_mora** : INT <<PK>>
+    --
+    id_cuota : INT <<FK>>
+    dias_atraso : INT
+    monto_mora : DECIMAL(12,2)
+    fecha_calculo : DATETIME
+  }
+
+  entity "Estado_Cuenta_Mensual" as edo_cuenta {
+    * **id_estado_cuenta** : INT <<PK>>
+    --
+    id_perfil_credito : INT <<FK>>
+    periodo : VARCHAR(7)
+    fecha_corte : DATE
+    saldo_anterior : DECIMAL(12,2)
+    compras_periodo : DECIMAL(12,2)
+    pagos_periodo : DECIMAL(12,2)
+    intereses_periodo : DECIMAL(12,2)
+    mora_periodo : DECIMAL(12,2)
+    saldo_final : DECIMAL(12,2)
+  }
+
+  entity "Detalle_Estado_Cuenta" as det_edo {
+    * **id_detalle_estado** : INT <<PK>>
+    --
+    id_estado_cuenta : INT <<FK>>
+    tipo_movimiento : VARCHAR(30)
+    descripcion : VARCHAR(200)
+    monto : DECIMAL(12,2)
+    fecha : DATETIME
+  }
+
+  entity "Pago_Realizado" as pago {
+    * **id_pago** : INT <<PK>>
+    --
+    id_perfil_credito : INT <<FK>>
+    monto_total : DECIMAL(12,2)
+    fecha_pago : DATETIME
+    metodo_pago : VARCHAR(30)
+    referencia : VARCHAR(100)
+  }
+
+  entity "Imputacion_Pago" as imputacion {
+    * **id_imputacion** : INT <<PK>>
+    --
+    id_pago : INT <<FK>>
+    id_cuota : INT <<FK>>
+    monto_capital : DECIMAL(12,2)
+    monto_interes : DECIMAL(12,2)
+    monto_mora : DECIMAL(12,2)
+  }
+}
+
+' === RELACIONES ===
+
+' Seguridad
+usuario ||--o{ usuario_tienda
+usuario }o--|| rol
+usuario ||--o{ log_op
+tienda ||--o{ usuario_tienda
+
+' Catálogo
+producto }o--|| tienda
+producto }o--o| unidad
+
+' Clientes
+perfil }o--|| usuario
+perfil }o--|| tienda
+perfil }o--|| moneda
+
+' Transacciones
+venta }o--|| perfil
+det_venta }o--|| venta
+det_venta }o--|| producto
+solicitud }o--|| perfil
+det_solicitud }o--|| solicitud
+det_solicitud }o--|| producto
+solicitud ||--o| venta : id_venta_generada
+
+' Finanzas
+cuota }o--|| venta
+mora }o--|| cuota
+edo_cuenta }o--|| perfil
+det_edo }o--|| edo_cuenta
+pago }o--|| perfil
+imputacion }o--|| pago
+imputacion }o--|| cuota
+
+@enduml
