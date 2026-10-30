@@ -142,6 +142,13 @@
 			<version>2.4.0</version>
 		</dependency>
 
+		<!-- Pluraliza nombres de tablas en el naming strategy (BC: shared) -->
+		<dependency>
+			<groupId>io.github.encryptorcode</groupId>
+			<artifactId>pluralize</artifactId>
+			<version>1.0.0</version>
+		</dependency>
+
 	</dependencies>
 
 	<build>
