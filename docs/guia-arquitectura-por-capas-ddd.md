@@ -1011,3 +1011,87 @@ El mecanismo de ACL de la sección 6 tiene dos mitades que viven en lugares dist
 Se agrupa **por capacidad** (`outboundservices/email/`, `outboundservices/push/`, `outboundservices/tokens/`...), nunca por tipo técnico de archivo (una carpeta `ports/` y otra `dtos/` separadas) — porque un puerto, su DTO y su excepción son una sola pieza conceptual que casi siempre se edita junta; separarlas por tipo técnico obligaría a saltar entre carpetas para ver algo que es un solo concepto.
 
 El umbral para subdividir: mientras la carpeta tenga pocos archivos y pocas capacidades mezcladas (orientativamente, hasta ~8-10 archivos entre 2-3 capacidades), déjala **plana** — es perfectamente legible de un vistazo. Subdivide en subcarpetas por capacidad cuando crece lo suficiente como para que mezclar 3 o más capacidades distintas en una sola carpeta plana empiece a dificultar encontrar algo. Es el mismo criterio que ya aplicas en `infrastructure/<capacidad>/` (sección 4.1) — mantener el mismo principio de organización en ambos lados del puerto (interfaz en `application`, implementación en `infrastructure`) hace que el proyecto se lea de forma consistente.
+
+
+
+---
+
+## 12. Documentación (Javadoc) y mensajes de error
+
+### 12.1 — Javadoc: qué documentar y qué no
+
+No todo necesita Javadoc — documentar de más es tan ruido como no documentar. La regla: **documenta lo que no se explica solo con el nombre del método/clase**, salta lo obvio.
+
+| Elemento | ¿Lleva Javadoc? | Qué debe decir |
+|---|---|---|
+| Aggregate | Sí, en la clase | Qué representa en el negocio (1-2 líneas), no cómo se persiste |
+| Domain repository (interfaz) | Sí, en la clase | A qué aggregate pertenece |
+| Método con regla de negocio no obvia | Sí | Qué invariante protege, no "obtiene X por Y" |
+| Getter/setter | No | Es ruido, el nombre ya lo dice todo |
+| `CommandServiceImpl.handle(...)` | Solo si la lógica no es CRUD trivial | Qué validaciones hace, en qué orden |
+| Controller / endpoint | Sí, con `@Operation` (OpenAPI) en vez de Javadoc puro | Ya documenta el endpoint para Swagger, no dupliques con Javadoc aparte |
+| Record (Command/Query/VO) | Opcional, solo si un campo no es autoexplicativo | Qué representa ese campo puntual |
+| Puerto de integración externa (`domain/services` o `outboundservices`) | Sí, siempre | Qué contrato cumple, independientemente del proveedor que lo implemente |
+
+Ejemplo de aggregate:
+
+```java
+/**
+ * Represents a product listed in the marketplace catalog.
+ * A product without a positive price cannot be published.
+ */
+@Getter
+public class Product extends AbstractDomainAggregateRoot<Product> {
+    // ...
+}
+```
+
+Ejemplo de puerto de integración (aquí sí vale la pena ser explícito, porque el lector no sabe qué proveedor hay detrás):
+
+```java
+/**
+ * Hashes and verifies user passwords.
+ * Implementations decide the algorithm (BCrypt, Argon2, etc.) - callers
+ * must never depend on a specific implementation.
+ */
+public interface PasswordHasher {
+    String hash(String rawPassword);
+    boolean matches(String rawPassword, String hashedPassword);
+}
+```
+
+**Regla transversal (ya la tenías en la sección 8):** todo Javadoc y mensaje de error va en inglés, aunque el resto de la conversación con tu equipo sea en español.
+
+### 12.2 — Mensajes de error: formato consistente
+
+Los mensajes no son solo para el usuario final, son lo primero que lees en un log cuando algo falla. Por eso deben decir qué aggregate, qué identificador y qué regla se rompió. Usa siempre las fábricas de `ApplicationError` (nunca construyas el mensaje a mano dentro del command service):
+
+```java
+// notFound: siempre con el tipo de aggregate y el id, en ese orden
+ApplicationError.notFound("Product", productId.toString());
+// resultado: "Product with id '42' was not found"
+
+// conflict: qué regla de unicidad se violo, con el valor que choco
+ApplicationError.conflict("Profile",
+    "A profile with email address '%s' already exists".formatted(command.email()));
+
+// businessRuleViolation: qué regla especifica, no un mensaje generico
+ApplicationError.businessRuleViolation("Subscription",
+    "Cannot cancel a subscription that is already expired");
+
+// validationError: qué campo y qué se esperaba
+ApplicationError.validationError("price", "Price must be greater than zero");
+
+// unexpected: siempre con el nombre de la operacion mas el mensaje original de la excepcion,
+// nunca tragarte la excepcion en silencio
+ApplicationError.unexpected("create-product", e.getMessage());
+```
+
+**Checklist de un buen mensaje de error:**
+
+- [ ] Nombra el aggregate/entidad involucrada, no dice solo "not found" a secas
+- [ ] Incluye el identificador o valor que causo el error (interpolado, no generico)
+- [ ] Describe la regla de negocio rota en `businessRuleViolation`/`conflict`, no repite el nombre del metodo
+- [ ] `unexpected` siempre lleva el nombre de la operacion (`"create-product"`, `"update-subscription"`) para ubicarlo rapido en logs
+- [ ] Esta en ingles, igual que el resto del codigo
+- [ ] El controller nunca arma el mensaje, solo traduce el `ApplicationError` ya armado a HTTP
