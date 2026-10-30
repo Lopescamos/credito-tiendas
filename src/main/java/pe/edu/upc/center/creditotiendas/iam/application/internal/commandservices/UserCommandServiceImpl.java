@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import pe.edu.upc.center.creditotiendas.iam.application.commandservices.AuthenticatedUser;
 import pe.edu.upc.center.creditotiendas.iam.application.commandservices.UserCommandService;
+import pe.edu.upc.center.creditotiendas.iam.application.internal.outboundservices.acl.ExternalStoreService;
 import pe.edu.upc.center.creditotiendas.iam.application.internal.outboundservices.hashing.HashingService;
 import pe.edu.upc.center.creditotiendas.iam.application.internal.outboundservices.tokens.TokenService;
 import pe.edu.upc.center.creditotiendas.iam.domain.model.aggregates.User;
@@ -28,6 +29,7 @@ public class UserCommandServiceImpl implements UserCommandService {
     private final UserRepository userRepository;
     private final HashingService hashingService;
     private final TokenService tokenService;
+    private final ExternalStoreService externalStoreService;
 
     /**
      * Compared against when the email does not exist, so an unknown email takes as long as a wrong
@@ -35,10 +37,12 @@ public class UserCommandServiceImpl implements UserCommandService {
      */
     private final String dummyPasswordHash;
 
-    public UserCommandServiceImpl(UserRepository userRepository, HashingService hashingService, TokenService tokenService) {
+    public UserCommandServiceImpl(UserRepository userRepository, HashingService hashingService,
+                                  TokenService tokenService, ExternalStoreService externalStoreService) {
         this.userRepository = userRepository;
         this.hashingService = hashingService;
         this.tokenService = tokenService;
+        this.externalStoreService = externalStoreService;
         this.dummyPasswordHash = hashingService.encode("dummy-password-for-timing-protection");
     }
 
@@ -96,11 +100,17 @@ public class UserCommandServiceImpl implements UserCommandService {
     }
 
     /**
-     * TODO(store-management): validate through the Store Management ACL that the store exists and
-     * is active (US-13: a deactivated store cannot receive new linked users).
+     * Checks, in order: the store exists and is active (US-13: a deactivated store cannot receive
+     * newly linked users), then the user is an active store admin not yet linked to that store.
      */
     @Override
     public Result<User, ApplicationError> handle(AssignUserToStoreCommand command) {
+        if (!externalStoreService.existsStore(command.storeId()))
+            return Result.failure(ApplicationError.notFound("Store", command.storeId().toString()));
+        if (!externalStoreService.isStoreActive(command.storeId()))
+            return Result.failure(ApplicationError.businessRuleViolation(
+                    "Store", "Store %d is deactivated and cannot receive newly linked users".formatted(command.storeId())));
+
         return updateUser(command.userId(), "assign-user-to-store", user -> {
             if (!user.isStoreAdmin())
                 return Result.failure(ApplicationError.businessRuleViolation(
