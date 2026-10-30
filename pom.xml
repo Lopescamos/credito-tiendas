@@ -8,11 +8,11 @@
 		<version>4.1.1</version>
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
-	<groupId>com.example</groupId>
+	<groupId>pe.edu.upc.center</groupId>
 	<artifactId>creditotiendas-backend</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
-	<name/>
-	<description/>
+	<name>creditotiendas-backend</name>
+	<description>CreditoTiendas REST API - current account (store credit) management for small businesses</description>
 	<url/>
 	<licenses>
 		<license/>
