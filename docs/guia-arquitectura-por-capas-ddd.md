@@ -1,8 +1,12 @@
 # Guía de construcción: Arquitectura por Capas + DDD + Bounded Contexts
 
-**Referencia analizada:** `1ASI0729-2610-11913/therapy-connect-platform`
-**Stack del repo de referencia:** Spring Boot 4.0.6 · Java 25 · PostgreSQL · Maven
+**Referencias analizadas:**
+- Flujo base del aggregate (secciones 1-3, 5-10): `1ASI0729-2610-11913/therapy-connect-platform` — Spring Boot 4.0.6 · Java 25 · PostgreSQL
+- Patrones reales de integraciones externas y organización fina (sección 4 y 11): `Aplicaciones-Dispositivos-Moviles/SkillSwap-WebServices-Java` (rama `develop`) — backend en producción con 9 Bounded Contexts, Gemini, Cloudinary, Firebase, Brevo y RevenueCat ya integrados
+
 **Autor de la guía:** Kevin Edu Lopez Montalvo — U20241D958
+
+**Uso:** esta guía es de referencia general, para aplicar en cualquier proyecto académico con arquitectura por capas + DDD, no para un enunciado de examen puntual.
 
 ---
 
@@ -22,7 +26,7 @@ CommandService/QueryService (interfaz)  →  ...Impl
 Resources  →  Transform Assemblers  →  Controller
 ```
 
-**Regla de oro:** siempre se construye de adentro hacia afuera. El `domain` no sabe que existe JPA, ni Spring, ni REST. Todo lo externo (base de datos, APIs de terceros, JWT, almacenamiento de imágenes) vive en `infrastructure` y se conecta al dominio mediante interfaces que el dominio declara.
+**Regla de oro:** siempre se construye de adentro hacia afuera. El `domain` no sabe que existe JPA, ni Spring, ni REST. Todo lo externo (base de datos, APIs de terceros, JWT, almacenamiento de imágenes) vive en `infrastructure` y se conecta al dominio/aplicación mediante interfaces que el propio proyecto declara.
 
 ---
 
@@ -36,7 +40,7 @@ com.open.therapyconnect.platform
 ├── coursesandlearning
 ├── deliverytracking       ← BC solo-lectura
 ├── iam                    ← tiene ACL + seguridad
-├── marketplace            ← tiene converters
+├── marketplace             ← tiene converters
 ├── profiles
 ├── progressandtracking    ← tiene events
 ├── scheduling
@@ -44,47 +48,53 @@ com.open.therapyconnect.platform
 └── shared                 ← base común, NO es un BC de negocio
 ```
 
-**Observación importante:** no todos los BC tienen las mismas carpetas. `alertmonitoring` y `deliverytracking` solo tienen `queryservices` porque son de solo lectura — no tienen `commands`, ni `commandservices`, ni `POST`. **Solo se crea lo que el enunciado pide.** Crear carpetas "por completitud" es ruido.
+**Observación importante:** no todos los BC tienen las mismas carpetas. `alertmonitoring` y `deliverytracking` solo tienen `queryservices` porque son de solo lectura — no tienen `commands`, ni `commandservices`, ni `POST`. **Solo se crea lo que el proyecto necesita.** Crear carpetas "por completitud" es ruido.
 
-Estructura completa de un BC con escritura:
+Estructura completa de un BC con escritura, integraciones externas y background jobs:
 
 ```
 <bounded-context>/
 ├── domain/
 │   ├── model/
 │   │   ├── aggregates/        Aggregate roots (POJO puro)
-│   │   ├── entities/          Entidades con identidad propia (opcional)
+│   │   ├── entities/          Entidades con identidad propia (opcional, solo si hay hijos reales)
 │   │   ├── valueobjects/      Records inmutables + enums
 │   │   ├── commands/          Records: Create/Update/Delete...Command
 │   │   ├── queries/           Records: Get...Query
 │   │   └── events/            Domain events (opcional)
-│   └── repositories/          Interfaces (puertos), sin anotaciones
+│   ├── repositories/          Interfaces (puertos) de persistencia, sin anotaciones
+│   └── services/              Puertos + lógica de dominio pura (ver 4.4)
 │
 ├── application/
 │   ├── commandservices/       Interfaces  XxxCommandService
 │   ├── queryservices/         Interfaces  XxxQueryService
-│   ├── acl/                   XxxContextFacadeImpl (opcional)
+│   ├── acl/                   XxxContextFacadeImpl (opcional, lado emisor — ver 11.1)
 │   └── internal/
 │       ├── commandservices/   XxxCommandServiceImpl   @Service
 │       ├── queryservices/     XxxQueryServiceImpl     @Service
 │       ├── eventhandlers/     Listeners @EventListener (opcional)
-│       └── outboundservices/  Puertos salientes: ACL, hashing, tokens
+│       ├── outboundservices/  Puertos salientes de aplicación (ver 4.4 y 11.2)
+│       └── emails/ (u otro)   Lógica de "contenido" cuando aplica (ver 4.5)
 │
 ├── infrastructure/
-│   └── persistence/jpa/
-│       ├── entities/          XxxPersistenceEntity    @Entity
-│       ├── converters/        VO de 1 campo  → AttributeConverter
-│       ├── embeddables/       VO de 2+ campos → @Embeddable
-│       ├── assemblers/        XxxPersistenceAssembler (estático)
-│       ├── repositories/      XxxPersistenceRepository (JpaRepository)
-│       └── adapters/          XxxRepositoryImpl       @Repository
+│   ├── persistence/jpa/
+│   │   ├── entities/          XxxPersistenceEntity    @Entity
+│   │   ├── converters/        VO de 1 campo  → AttributeConverter
+│   │   ├── embeddables/       VO de 2+ campos → @Embeddable
+│   │   ├── assemblers/        XxxPersistenceAssembler (estático)
+│   │   ├── repositories/      XxxPersistenceRepository (JpaRepository)
+│   │   └── adapters/          XxxRepositoryImpl       @Repository
+│   ├── <capacidad>/[<proveedor>/]   Integraciones externas (ver sección 4 completa)
+│   ├── config/                 @Configuration del BC
+│   ├── scheduling/             @Scheduled jobs (opcional, ver 4.6)
+│   └── startup/                Tareas al arrancar la app, @EventListener(ApplicationReadyEvent) (opcional, ver 4.6)
 │
 └── interfaces/
     ├── rest/
     │   ├── XxxController.java (plural: ProductsController)
     │   ├── resources/         Records de entrada y salida
     │   └── transform/         Assemblers REST
-    ├── acl/                   XxxContextFacade (interfaz, opcional)
+    ├── acl/                   XxxContextFacade (interfaz, opcional, lado emisor — ver 11.1)
     └── events/                Integration events (opcional)
 ```
 
@@ -466,9 +476,9 @@ Patrón de validación cuando hay una regla de unicidad: **consultar antes de gu
 ```java
 var emailAddress = new EmailAddress(command.email());
 if (profileRepository.existsByEmailAddress(emailAddress)) {
-    return Result.failure(ApplicationError.conflict(
-            "Profile", "A profile with email address '%s' already exists".formatted(command.email())));
-}
+        return Result.failure(ApplicationError.conflict(
+        "Profile", "A profile with email address '%s' already exists".formatted(command.email())));
+        }
 ```
 
 Ese `existsByEmailAddress` es exactamente el método que en el **Paso 4** declaraste en el puerto del dominio. Por eso el flujo es circular en la práctica: una regla de negocio aquí te obliga a volver a `domain/repositories` y agregar el método.
@@ -521,17 +531,17 @@ public record ProductResource(
         Double price, String imageUrl, String recommendedFor) {}
 ```
 
-Si el enunciado pide validación e i18n, aquí van las anotaciones Jakarta con claves de mensaje:
+Si el proyecto pide validación e i18n, aquí van las anotaciones Jakarta con claves de mensaje:
 
 ```java
 public record CreateProfileResource(
-    @NotBlank(message = "{validation.not-blank}")
-    @Schema(description = "Profile first name", example = "John")
-    String firstName,
+        @NotBlank(message = "{validation.not-blank}")
+        @Schema(description = "Profile first name", example = "John")
+        String firstName,
 
-    @NotBlank(message = "{validation.not-blank}")
-    @Email(message = "{validation.email}")
-    String email
+        @NotBlank(message = "{validation.not-blank}")
+        @Email(message = "{validation.email}")
+        String email
 ) {}
 ```
 
@@ -615,40 +625,121 @@ public class ProductsController {
 }
 ```
 
-**Detalle que vale la pena señalar:** el `CreateProductCommand` devuelve solo el `Long` del id. El controller entonces **encadena un query** con `flatMap` para recuperar el aggregate completo y poder devolverlo en el response del POST. Ese es el motivo por el que, aunque el enunciado solo pida un POST, igual se implementa un `GetByIdQuery` — sirve para armar la respuesta del POST.
+**Detalle que vale la pena señalar:** el `CreateProductCommand` devuelve solo el `Long` del id. El controller entonces **encadena un query** con `flatMap` para recuperar el aggregate completo y poder devolverlo en el response del POST. Ese es el motivo por el que, aunque solo se necesite un POST, igual se implementa un `GetByIdQuery` — sirve para armar la respuesta del POST.
 
 ---
 
-## 4. Dónde va lo externo (APIs de terceros, Cloudinary, Google, SMTP)
+## 4. Dónde va lo externo (APIs de terceros, Cloudinary, Google, SMTP, pagos...)
 
-Esta es la parte que el repo de referencia no ejercita mucho, pero la regla se deduce con claridad de cómo está organizado `iam`:
+La regla general:
 
-> **Todo lo que hable con el mundo exterior vive en `infrastructure`. El dominio nunca lo conoce; lo usa a través de una interfaz que el propio proyecto declara.**
+> **Todo lo que hable con el mundo exterior vive en `infrastructure`. El dominio nunca lo conoce; la aplicación tampoco conoce la clase concreta del proveedor. Ambos lo usan a través de una interfaz que el propio proyecto declara.**
 
-En `iam` se ve el patrón exacto aplicado a hashing y tokens:
+### 4.1 — Regla para decidir si va plano o con subcarpeta de proveedor
+
+No es 100% consistente ni siquiera en un repo real en producción (ningún repo de un equipo lo es), pero el patrón dominante es este:
+
+- **Usa subcarpeta `<capacidad>/<proveedor>/`** cuando:
+    1. **Coexisten dos o más implementaciones** del mismo puerto — el caso más claro: una implementación "real" (Brevo, Firebase, RevenueCat) y una de respaldo/pruebas (logging, simulada) que se activa por perfil de Spring.
+    2. **El nombre de la capacidad es genérico y reutilizable** entre proyectos distintos — `hashing` y `tokens` son conceptos que cualquier backend necesita, así que aunque hoy solo haya un proveedor (BCrypt, JWT), se deja la subcarpeta como punto de extensión explícito (mañana podría ser Argon2 o un token opaco).
+- **Déjalo plano** (`<capacidad>/Xxx.java` directo, sin subcarpeta) cuando hay un único proveedor y el nombre de la capacidad ya es específico del dominio del proyecto — una capacidad como `ai` (un solo modelo de IA), `filestorage` (un solo proveedor de almacenamiento) o `taxonomy` (datos locales) normalmente no se va a duplicar con otro proveedor en el mismo proyecto, así que la subcarpeta sería ceremonia sin beneficio.
+
+Si tienes dudas: **si vas a necesitar un fallback o una versión simulada para pruebas, usa subcarpeta desde el principio.** Si es un único proveedor y no vas a cambiarlo, plano está bien.
+
+Ejemplo real de capacidad con subcarpeta de proveedor (`iam`, hashing y tokens):
 
 ```
 iam/application/internal/outboundservices/hashing/HashingService.java    ← INTERFAZ (puerto)
 iam/application/internal/outboundservices/tokens/TokenService.java       ← INTERFAZ (puerto)
 
-iam/infrastructure/hashing/bcrypt/services/HashingServiceImpl.java       ← IMPLEMENTACIÓN
-iam/infrastructure/tokens/jwt/services/TokenServiceImpl.java             ← IMPLEMENTACIÓN
+iam/infrastructure/hashing/bcrypt/HashingServiceImpl.java                ← IMPLEMENTACIÓN
+iam/infrastructure/tokens/jwt/TokenServiceImpl.java                      ← IMPLEMENTACIÓN
 ```
 
-El `UserCommandServiceImpl` inyecta `HashingService` (la interfaz), no BCrypt. Si mañana cambias BCrypt por Argon2, el `application` no se entera.
+El `UserCommandServiceImpl` inyecta `HashingService` (la interfaz), nunca `BCrypt` directamente. Si mañana cambias BCrypt por Argon2, el `application` no se entera.
 
-**Aplicando la misma regla a integraciones externas:**
+### 4.2 — Dónde vive la configuración (`Settings`)
 
-| Integración | Puerto (interfaz) | Implementación |
+También varía, y tiene una razón:
+
+- Cuando hay **selección entre proveedores** (ej. decidir si se usa un envío real o solo loguear en consola), el flag de selección vive en la **raíz de la capacidad**: `infrastructure/email/EmailSettings.java`, `infrastructure/push/FirebaseSettings.java` — son genéricos a la capacidad, no a un proveedor puntual.
+- Cuando la configuración es **específica de un proveedor** (API key, timeout, secreto), vive **dentro** de la subcarpeta de ese proveedor: `infrastructure/tokens/jwt/TokenSettings.java`, `infrastructure/payments/revenuecat/RevenueCatSettings.java`.
+- Cuando no hay selección de proveedor (solo uno existe), la `Settings` vive plana junto a la implementación: `infrastructure/filestorage/CloudinarySettings.java`, `infrastructure/ai/GeminiSettings.java`.
+
+### 4.3 — El patrón completo con un ejemplo real: Cloudinary
+
+Tomando una subida de certificados a Cloudinary como ejemplo end-to-end:
+
+```
+credentialverification/
+├── application/internal/outboundservices/
+│   └── FileStorageService.java            ← PUERTO (interfaz), declarado por la aplicación
+│
+└── infrastructure/filestorage/
+    ├── CloudinarySettings.java            ← @ConfigurationProperties (API key, cloud name...)
+    └── CloudinaryStorageService.java      ← IMPLEMENTACIÓN, @Service, implementa FileStorageService
+```
+
+El command service inyecta `FileStorageService` (la interfaz), nunca `CloudinaryStorageService` directamente. Si mañana cambian Cloudinary por S3, solo se toca `infrastructure/filestorage/`; `application` y `domain` no se enteran. Lo único que cambia caso a caso es **en qué carpeta vive el puerto** (`application/internal/outboundservices` aquí; en otros casos `domain/services`, ver 4.4) y **si hay subcarpeta de proveedor** (aquí no, porque solo hay un proveedor).
+
+### 4.4 — La regla decisiva: ¿el puerto va en `domain/services` o en `application/internal/outboundservices`?
+
+Esta es la pregunta que más confunde, porque hay integraciones externas "serias" (pagos, IA) que terminan en `domain/services`, y otras más simples (tokens, webhooks) que terminan en `application/outboundservices`. No es azar — hay un criterio.
+
+**La pregunta de una sola línea para decidir sin dudar**, antes de crear el puerto:
+
+> *"Si cambia el proveedor/mecanismo de [capacidad], ¿cambia algo en cómo describirías el negocio del aggregate, o solo cambia cómo está implementado por dentro?"*
+
+- Si completas **"le importaría al negocio"** → `domain/services`. Es una capacidad tan central que, sin ella, el aggregate pierde su razón de ser (cobrar una suscripción, evaluar un proyecto, hashear una contraseña, saber qué skills existen).
+- Si completas **"no le importaría"** → `application/internal/outboundservices`. Es un detalle técnico/de orquestación intercambiable sin que el negocio lo note (cómo se identifica una sesión, cómo se valida una firma HTTP, cómo se transporta un mensaje).
+
+Casos resueltos con esta regla:
+
+| Puerto | Dónde va | Por qué |
 |---|---|---|
-| Subida de imágenes (Cloudinary) | `application/internal/outboundservices/storage/ImageStorageService.java` | `infrastructure/storage/cloudinary/services/CloudinaryImageStorageServiceImpl.java` |
-| Google Maps / Geocoding | `application/internal/outboundservices/geocoding/GeocodingService.java` | `infrastructure/geocoding/google/services/GoogleGeocodingServiceImpl.java` |
-| Envío de correo | `application/internal/outboundservices/mail/MailService.java` | `infrastructure/mail/smtp/services/SmtpMailServiceImpl.java` |
-| Notificaciones push (FCM) | `application/internal/outboundservices/notifications/NotificationService.java` | `infrastructure/notifications/fcm/services/FcmNotificationServiceImpl.java` |
+| `PasswordHasher` | `domain/services` | Un usuario no puede autenticarse de forma segura sin esto — es parte de lo que significa "crear una cuenta". |
+| `PaymentGateway` (cobrar una suscripción) | `domain/services` | Una `Subscription` sin poder cobrarse no es una suscripción, es un registro vacío. El negocio sí tiene opinión sobre reintentos, qué pasa si falla, etc. |
+| Evaluar/generar contenido con IA (ej. evaluar un mini-proyecto) | `domain/services` | Evaluar es la razón de ser de ese aggregate, aunque por debajo llame a un modelo de IA de terceros. |
+| `SkillTaxonomy` / catálogo de habilidades | `domain/services` | El aggregate no puede construirse sin saber qué opciones existen — es insumo de una regla de negocio. |
+| `TokenGenerator` (token de sesión, para el login) | `application/outboundservices` | Emitir un JWT es un detalle de cómo respondes al login, no una regla de negocio del usuario. |
+| `WebhookAuthorizationVerifier` | `application/outboundservices` | Validar una firma HTTP es seguridad/plomería; si cambia el mecanismo de firma, a nadie del negocio le importa. |
+| `EmailSender` / `PushNotificationSender` | `application/outboundservices` | El *envío* es un detalle de entrega, distinto de la decisión de negocio de *qué* comunicar (ver 4.5). |
 
-El patrón de carpeta en `infrastructure` es consistente: `infrastructure/<capacidad>/<proveedor>/services/`. La capacidad es el "qué" (hashing, tokens, storage), el proveedor es el "con qué" (bcrypt, jwt, cloudinary, google).
+Y los servicios 100% puros, sin ninguna dependencia externa (un validador de formato, una política de puntuación), también caen naturalmente en `domain/services` — ahí no hay ni siquiera duda, porque no hay proveedor que intercambiar.
 
-**Las credenciales nunca van en el código** — entran por `application.properties` leyendo variables de entorno, y la clase de configuración que construye el cliente va en `infrastructure/<capacidad>/<proveedor>/configuration/`.
+**No dejes la decisión 50/50.** Si dudas, es señal de que todavía no tienes claro qué hace esa capacidad por el negocio — resuélvelo ahí, antes de crear la carpeta, respondiendo la pregunta en voz alta.
+
+### 4.5 — Por qué una misma integración a veces está partida entre `infrastructure` y `application`
+
+Pasa cuando una integración tiene tanto **"qué se envía/genera"** (depende de datos y reglas del dominio) como **"cómo se transporta/entrega"** (un detalle de infraestructura intercambiable). El caso típico es el correo:
+
+```
+application/internal/emails/
+└── VerificationEmailComposer.java   ← decide el CONTENIDO del correo
+
+infrastructure/email/
+├── EmailSettings.java                ← selecciona el proveedor
+├── brevo/BrevoEmailSenderAdapter.java       ← decide el TRANSPORTE (proveedor real)
+└── logging/LoggingEmailSenderAdapter.java   ← decide el TRANSPORTE (solo loguea, para dev)
+```
+
+No es la misma responsabilidad repetida en dos capas — son dos responsabilidades distintas que suenan parecido porque ambas tienen la palabra "email":
+
+- **El composer (application)** decide **qué dice** el correo: asunto, cuerpo, link, idioma — depende del estado del negocio (nombre del usuario, token, idioma). Es una regla de aplicación, no de transporte. Devuelve un DTO plano (`EmailMessage`), sin saber nada de SMTP ni del proveedor.
+- **El sender + adaptadores (infrastructure)** deciden **cómo se entrega** ese mensaje ya armado. No les importa qué dice, solo cómo transportarlo a su destino.
+
+**La regla generalizable:** cuando una integración mezcla "qué se envía" (depende del dominio) con "cómo se transporta" (intercambiable), sepáralas: el "qué" va en `application/internal/<algo>` (o directamente inline en el command service si es simple), y el "cómo" va en el puerto + adaptador de `infrastructure/<capacidad>/`. Si hoy el contenido es simple y se arma inline en el command service, no hace falta crear esa carpeta de composer todavía — créala el día que el contenido se vuelva lo bastante complejo como para merecer su propia clase.
+
+### 4.6 — Otras carpetas de `infrastructure` que no son ni base de datos ni API externa
+
+`infrastructure` no es "la carpeta de las APIs externas" — es la carpeta de **cualquier decisión técnica concreta que el dominio no debería conocer**, llame o no a internet:
+
+- `infrastructure/scheduling/` — jobs con `@Scheduled` (ej. un reasignador de casos vencidos, un expirador de suscripciones). Un cronjob no habla con un proveedor externo, pero sigue siendo "mecanismo", no regla de negocio — por eso vive en infraestructura y no en `application`.
+- `infrastructure/startup/` — tareas que corren una vez al arrancar la app con `@EventListener(ApplicationReadyEvent.class)` (ej. retomar evaluaciones que quedaron a medias si el servidor se cayó). Es infraestructura porque depende del ciclo de vida de Spring, no del dominio.
+- `infrastructure/security/` — filtros y configuración de Spring Security (`JwtAuthenticationFilter`, `SecurityConfig`), separado de `tokens/jwt/` (que solo genera/valida el JWT en sí).
+- `infrastructure/taxonomy/` (o similar) — confirma que "infraestructura" no es sinónimo de "llama a internet": leer un archivo JSON local también es infraestructura, porque es un detalle concreto e intercambiable (mañana podría venir de una base de datos o de una API), y se trata igual, detrás de un puerto de dominio.
+
+El dominio y la aplicación solo conocen interfaces; `infrastructure` es donde se decide el "cómo" real, sea cual sea: una librería de terceros, un archivo local, un cronjob, un filtro HTTP, un listener de arranque.
 
 ---
 
@@ -680,13 +771,9 @@ shared/
     └── transform/{ResponseEntityAssembler, ErrorResponseAssembler}.java
 ```
 
-**Regla de uso en un examen:** el `shared` se recibe hecho y **no se rediseña**. Si el enunciado pide un value object compartido entre BCs, se **agrega**:
-
-1. El record en `shared/domain/model/valueobjects/`
-2. Su converter o embeddable en `shared/infrastructure/persistence/jpa/converters|embeddables/`
-3. Se **referencia** desde la persistence entity del BC que lo usa
-
 El `SnakeCaseWithPluralizedTablePhysicalNamingStrategy` es el que convierte automáticamente `ProductPersistenceEntity` → tabla `products` y `catalogId` → columna `catalog_id`. Por eso las entities casi no necesitan `@Table(name=...)` ni `@Column(name=...)` explícitos.
+
+Si un value object debe compartirse entre varios BCs, se agrega en `shared/domain/model/valueobjects/` (con su converter/embeddable correspondiente en `shared/infrastructure/persistence/...`) y se referencia desde la persistence entity de cada BC que lo use.
 
 ---
 
@@ -696,7 +783,7 @@ Dos mecanismos, dos propósitos distintos.
 
 ### ACL (Anti-Corruption Layer) — llamada síncrona
 
-Se usa cuando un BC necesita **preguntarle algo a otro ahora mismo** y esperar respuesta.
+Se usa cuando un BC necesita **preguntarle algo a otro ahora mismo** y esperar respuesta. El detalle fino de dónde vive cada pieza del lado consumidor está en la **sección 11.1**; el esqueleto general es:
 
 ```
 <bc-emisor>/interfaces/acl/XxxContextFacade.java         ← la cara pública del BC
@@ -762,7 +849,7 @@ public class NoteCreatedEventHandler {
 
 Si otro BC debe enterarse, el handler del BC emisor **traduce** el domain event a un integration event y lo republica. El BC receptor escucha el **integration event**, nunca el domain event interno.
 
-> **Nota honesta sobre el repo de referencia:** `progressandtracking` declara 5 domain events (`NoteCreatedEvent`, `NoteUpdatedEvent`, `NoteDeletedEvent`, `ParentNoteCreatedEvent`, `TeacherNoteCreatedEvent`) pero sus repository adapters **no tienen cableado el `ApplicationEventPublisher`** — los eventos están declarados y no se publican. El patrón completo descrito arriba corresponde a las convenciones del curso, no a lo que ese repo ejercita hoy.
+**Para que el `eventPublisher.publishEvent(...)` del paso 3 funcione de verdad** (y no se quede solo declarado sin dispararse), el proyecto necesita un publicador real cableado — típicamente una clase en `shared/infrastructure/events/` que implementa el publicador de dominio sobre `ApplicationEventPublisher` de Spring. Sin esa pieza, los eventos quedan como código muerto: se registran pero nadie los dispara.
 
 **Dos handlers con el mismo nombre en BCs distintos:** si el emisor y el receptor tienen ambos una clase `ProfileCreatedEventHandler`, hay que darle nombre explícito al bean para que Spring los distinga:
 
@@ -786,8 +873,8 @@ public record SeedProductsCommand() {}
 public void handle(SeedProductsCommand command) {
     if (this.productRepository.count() == 0) {
         List.of(
-            new Product(new ProductCode("AV-OAT-001"), "Rolled Oats", 40.0),
-            new Product(new ProductCode("AV-BER-002"), "Blueberries", 100.0)
+                new Product(new ProductCode("AV-OAT-001"), "Rolled Oats", 40.0),
+                new Product(new ProductCode("AV-BER-002"), "Blueberries", 100.0)
         ).forEach(this.productRepository::save);
     }
 }
@@ -830,22 +917,25 @@ Si el aggregate se llama `Product`, todo lo demás se deriva mecánicamente:
 | domain | `model/queries/` | `GetProductByIdQuery.java`, `GetAllProductsQuery.java` |
 | domain | `model/events/` | `ProductCreatedEvent.java` |
 | domain | `repositories/` | `ProductRepository.java` |
+| domain | `services/` (si el puerto es "central", ver 4.4) | `ProductXxxService.java` |
 | infrastructure | `jpa/converters/` | `ProductIdPersistenceConverter.java` |
 | infrastructure | `jpa/embeddables/` | `ProductDimensionsPersistenceEmbeddable.java` |
 | infrastructure | `jpa/entities/` | `ProductPersistenceEntity.java` |
 | infrastructure | `jpa/assemblers/` | `ProductPersistenceAssembler.java` |
 | infrastructure | `jpa/repositories/` | `ProductPersistenceRepository.java` |
 | infrastructure | `jpa/adapters/` | `ProductRepositoryImpl.java` |
+| infrastructure | `<capacidad>/[<proveedor>/]` (ver sección 4) | `GeminiXxx.java`, `CloudinaryXxx.java`, etc. |
+| infrastructure | `scheduling/` \| `startup/` | `XxxScheduler.java`, `XxxRecovery.java` |
 | application | `commandservices/` | `ProductCommandService.java` |
 | application | `queryservices/` | `ProductQueryService.java` |
 | application | `internal/commandservices/` | `ProductCommandServiceImpl.java` |
 | application | `internal/queryservices/` | `ProductQueryServiceImpl.java` |
 | application | `internal/eventhandlers/` | `ProductCreatedEventHandler.java` |
-| application | `internal/outboundservices/acl/` | `ExternalProductService.java` |
+| application | `internal/outboundservices/` (si el puerto es "de apoyo", ver 4.4) | `ProductXxxService.java` |
+| application | `internal/outboundservices/acl/` (ver 11.1) | `ExternalProductService.java` |
 | application | `acl/` | `MarketplaceContextFacadeImpl.java` |
 | interfaces | `rest/resources/` | `CreateProductResource.java`, `ProductResource.java` |
-| interfaces | `rest/transform/` | `CreateProductCommandFromResourceAssembler.java` |
-| interfaces | `rest/transform/` | `ProductResourceFromEntityAssembler.java` |
+| interfaces | `rest/transform/` | `CreateProductCommandFromResourceAssembler.java`, `ProductResourceFromEntityAssembler.java` |
 | interfaces | `rest/` | `ProductsController.java` *(plural)* |
 | interfaces | `acl/` | `MarketplaceContextFacade.java` |
 | interfaces | `events/` | `ProductCreatedIntegrationEvent.java` |
@@ -879,11 +969,45 @@ Antes de dar por terminado un aggregate, comprobar:
 - [ ] Hay un assembler REST por cada Resource
 - [ ] La URL del controller está en minúscula y plural
 - [ ] La clase `Main` lleva `@EnableJpaAuditing`
-- [ ] Todo lo que habla con un servicio externo está en `infrastructure`, detrás de una interfaz
-- [ ] No se creó ninguna carpeta ni archivo que el enunciado no pida
+- [ ] **Toda integración externa está detrás de una interfaz** — el command/domain service nunca importa la clase concreta del proveedor
+- [ ] **Decidiste conscientemente**, respondiendo la pregunta de 4.4, si el puerto va en `domain/services` o en `application/internal/outboundservices` — y fuiste consistente dentro del BC
+- [ ] Si coexisten un proveedor real y uno simulado/logging, **usaste subcarpeta por proveedor** (ver 4.1)
+- [ ] Si una integración tiene "qué se envía" y "cómo se transporta", **las separaste** (ver 4.5)
+- [ ] Un cronjob o una tarea de arranque va en `infrastructure/scheduling/` o `infrastructure/startup/`, no suelto en `application`
+- [ ] Las credenciales nunca están hardcodeadas — entran por `application.properties`/variables de entorno vía una clase `Settings`
+- [ ] Si `outboundservices` ya mezcla 3+ capacidades y se volvió difícil de escanear, **la subdividiste por capacidad** (ver 11.3)
+- [ ] No se creó ninguna carpeta ni archivo que el proyecto no necesite
 
 ---
 
 ## 10. Resumen en una frase
 
-> Se empieza por el **aggregate** (POJO puro), se derivan sus **commands, queries y puerto de repositorio**; luego se baja a **infrastructure** para traducirlo a JPA (converter/embeddable → entity → assembler → repository → adapter); se sube a **application** para la lógica de negocio (interfaz → impl con `Result`); y se termina en **interfaces** con los resources, los assemblers REST y el controller. Lo externo —base de datos, APIs de terceros, tokens, imágenes— siempre entra por `infrastructure` detrás de una interfaz que el proyecto declara, nunca directo en el dominio.
+> Se empieza por el **aggregate** (POJO puro), se derivan sus **commands, queries y puerto de repositorio**; luego se baja a **infrastructure** para traducirlo a JPA (converter/embeddable → entity → assembler → repository → adapter); se sube a **application** para la lógica de negocio (interfaz → impl con `Result`); y se termina en **interfaces** con los resources, los assemblers REST y el controller. Lo externo —base de datos, APIs de terceros, tokens, pagos, cronjobs— siempre entra por `infrastructure` detrás de una interfaz, pero **esa interfaz vive en `domain/services` cuando la capacidad es el corazón del aggregate, y en `application/internal/outboundservices` cuando es un apoyo técnico de la orquestación** — y cuando una integración mezcla "qué se dice" con "cómo se entrega" (como el correo), esas dos responsabilidades se separan en capas distintas aunque compartan el mismo nombre coloquial.
+
+---
+
+## 11. Profundización: ACL, `outboundservices` y qué lleva interfaz+implementación
+
+### 11.1 — ACL dentro de `application`: lado emisor vs lado consumidor
+
+El mecanismo de ACL de la sección 6 tiene dos mitades que viven en lugares distintos del mismo patrón `application`, y conviene no confundirlas:
+
+- **Lado emisor** (el BC que expone su cara pública a otros): `application/acl/XxxContextFacadeImpl.java` — va **directo** en `application/acl/`, **no** dentro de `outboundservices`. Es un nivel hermano de `commandservices`/`queryservices`, porque el emisor no está "saliendo" a buscar nada — está exponiendo su propia interfaz pública.
+- **Lado consumidor** (el BC que usa el facade de otro): `application/internal/outboundservices/acl/ExternalXxxService.java` — aquí **sí** va dentro de `outboundservices`, en su propia subcarpeta `acl/`. Razón: para el consumidor, pedirle algo a otro BC es exactamente el mismo tipo de necesidad que pedirle algo a un proveedor externo — "necesito algo de afuera de mi BC para completar mi caso de uso" — por eso cae en `outboundservices` como una subcarpeta más, junto a `email/`, `push/`, etc.
+
+### 11.2 — Qué va dentro de `outboundservices` en general (no solo ACL)
+
+`outboundservices` es la carpeta de **todo lo que la aplicación necesita para salir del BC**, sea hacia otro BC (ACL) o hacia un proveedor externo. Dentro conviven, por capacidad, cuatro tipos de archivo:
+
+- Los **puertos** en sí (interfaces): `EmailSender`, `PushNotificationSender`, `TokenGenerator`, `FileStorageService`, `WebhookAuthorizationVerifier`...
+- Los **DTOs/value types** que esos puertos usan para hablar: `EmailMessage`, `PushNotification`, `AuthenticatedUser`, `CertificateContent`...
+- Las **excepciones** propias de esa comunicación: `EmailDeliveryException`...
+- Y, si aplica, la subcarpeta `acl/` con el wrapper hacia otro BC (ver 11.1).
+
+**No todo archivo de `outboundservices` (ni de `domain/services`) sigue el patrón interfaz+implementación.** Ese patrón solo aplica a los **puertos de verdad**: algo que representa una acción que podría resolverse de otra forma (generar un token, enviar un correo, hashear una contraseña) — ahí sí hay interfaz en `application`/`domain` e implementación concreta en `infrastructure`. Los `record` que viajan junto a esos puertos (`EmailMessage`, `PushNotification`, `AuthenticatedUser`) son **DTOs planos**: solo cargan datos entre el puerto y quien lo llama, no tienen comportamiento intercambiable, así que no necesitan — ni deben tener — una interfaz propia. Regla rápida: si la clase representa una acción → interfaz + impl; si solo representa datos → record plano, sin interfaz.
+
+### 11.3 — Cuándo subdividir `outboundservices` por capacidad
+
+Se agrupa **por capacidad** (`outboundservices/email/`, `outboundservices/push/`, `outboundservices/tokens/`...), nunca por tipo técnico de archivo (una carpeta `ports/` y otra `dtos/` separadas) — porque un puerto, su DTO y su excepción son una sola pieza conceptual que casi siempre se edita junta; separarlas por tipo técnico obligaría a saltar entre carpetas para ver algo que es un solo concepto.
+
+El umbral para subdividir: mientras la carpeta tenga pocos archivos y pocas capacidades mezcladas (orientativamente, hasta ~8-10 archivos entre 2-3 capacidades), déjala **plana** — es perfectamente legible de un vistazo. Subdivide en subcarpetas por capacidad cuando crece lo suficiente como para que mezclar 3 o más capacidades distintas en una sola carpeta plana empiece a dificultar encontrar algo. Es el mismo criterio que ya aplicas en `infrastructure/<capacidad>/` (sección 4.1) — mantener el mismo principio de organización en ambos lados del puerto (interfaz en `application`, implementación en `infrastructure`) hace que el proyecto se lea de forma consistente.
