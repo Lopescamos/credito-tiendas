@@ -7,6 +7,7 @@ import pe.edu.upc.center.creditotiendas.storemanagement.infrastructure.persisten
 import pe.edu.upc.center.creditotiendas.storemanagement.infrastructure.persistence.jpa.repositories.CurrencyPersistenceRepository;
 
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public class CurrencyRepositoryImpl implements CurrencyRepository {
@@ -15,6 +16,11 @@ public class CurrencyRepositoryImpl implements CurrencyRepository {
 
     public CurrencyRepositoryImpl(CurrencyPersistenceRepository currencyPersistenceRepository) {
         this.currencyPersistenceRepository = currencyPersistenceRepository;
+    }
+
+    @Override
+    public Optional<Currency> findById(Long id) {
+        return currencyPersistenceRepository.findById(id).map(CurrencyPersistenceAssembler::toDomainFromPersistence);
     }
 
     @Override

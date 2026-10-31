@@ -122,7 +122,7 @@ package "TRANSACCIONES" #FFFDE7 {
     * **id_venta** : INT <<PK>>
     --
     id_perfil_credito : INT <<FK>>
-    fecha_venta : DATETIME
+    fecha_venta : DATE
     monto_total : DECIMAL(12,2)
     modalidad : VARCHAR(20)
     plazo_dias : INT
