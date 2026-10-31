@@ -1,6 +1,7 @@
 package pe.edu.upc.center.creditotiendas.creditmanagement.application.internal.commandservices;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.interceptor.TransactionAspectSupport;
@@ -18,6 +19,7 @@ import pe.edu.upc.center.creditotiendas.creditmanagement.domain.repositories.Cre
 import pe.edu.upc.center.creditotiendas.creditmanagement.domain.repositories.CreditPurchaseRequestRepository;
 import pe.edu.upc.center.creditotiendas.creditmanagement.domain.repositories.CreditSaleRepository;
 import pe.edu.upc.center.creditotiendas.creditmanagement.domain.services.PurchaseRequestEligibilityPolicy;
+import pe.edu.upc.center.creditotiendas.creditmanagement.interfaces.events.CreditSaleRegisteredIntegrationEvent;
 import pe.edu.upc.center.creditotiendas.shared.application.result.ApplicationError;
 import pe.edu.upc.center.creditotiendas.shared.application.result.Result;
 
@@ -42,15 +44,18 @@ public class CreditPurchaseRequestCommandServiceImpl implements CreditPurchaseRe
     private final CreditProfileRepository creditProfileRepository;
     private final CreditSaleRepository creditSaleRepository;
     private final ExternalStoreService externalStoreService;
+    private final ApplicationEventPublisher eventPublisher;
 
     public CreditPurchaseRequestCommandServiceImpl(CreditPurchaseRequestRepository purchaseRequestRepository,
                                                    CreditProfileRepository creditProfileRepository,
                                                    CreditSaleRepository creditSaleRepository,
-                                                   ExternalStoreService externalStoreService) {
+                                                   ExternalStoreService externalStoreService,
+                                                   ApplicationEventPublisher eventPublisher) {
         this.purchaseRequestRepository = purchaseRequestRepository;
         this.creditProfileRepository = creditProfileRepository;
         this.creditSaleRepository = creditSaleRepository;
         this.externalStoreService = externalStoreService;
+        this.eventPublisher = eventPublisher;
     }
 
     /**
@@ -124,6 +129,9 @@ public class CreditPurchaseRequestCommandServiceImpl implements CreditPurchaseRe
                     APPROVED_REQUEST_INSTALLMENTS, APPROVED_REQUEST_GRACE_DAYS,
                     request.get().getDetails().stream().map(PurchaseRequestDetail::toSaleDetail).toList(),
                     request.get().getId()));
+            eventPublisher.publishEvent(new CreditSaleRegisteredIntegrationEvent(
+                    sale.getId(), sale.getCreditProfileId(), profile.getStoreId(),
+                    sale.paymentPlan().installments()));
             return Result.success(purchaseRequestRepository.save(request.get().approve(sale.getId())));
         } catch (Exception e) {
             TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();

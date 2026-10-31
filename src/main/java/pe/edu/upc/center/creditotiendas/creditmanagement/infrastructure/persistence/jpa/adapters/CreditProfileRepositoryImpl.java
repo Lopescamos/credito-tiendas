@@ -35,6 +35,11 @@ public class CreditProfileRepositoryImpl implements CreditProfileRepository {
     }
 
     @Override
+    public List<CreditProfile> findAllActiveByCutoffDay(int cutoffDay) {
+        return toDomain(persistenceRepository.findAllByActiveTrueAndCutoffDayOrderByIdAsc(cutoffDay));
+    }
+
+    @Override
     public boolean existsByUserIdAndStoreId(Long userId, Long storeId) {
         return persistenceRepository.existsByUserIdAndStoreId(userId, storeId);
     }
