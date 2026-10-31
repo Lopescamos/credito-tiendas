@@ -1,6 +1,7 @@
 package pe.edu.upc.center.creditotiendas.creditmanagement.application.internal.commandservices;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import pe.edu.upc.center.creditotiendas.creditmanagement.application.commandservices.CreditSaleCommandService;
 import pe.edu.upc.center.creditotiendas.creditmanagement.application.internal.outboundservices.acl.ExternalStoreService;
@@ -12,6 +13,7 @@ import pe.edu.upc.center.creditotiendas.creditmanagement.domain.model.valueobjec
 import pe.edu.upc.center.creditotiendas.creditmanagement.domain.model.valueobjects.SaleModalities;
 import pe.edu.upc.center.creditotiendas.creditmanagement.domain.repositories.CreditProfileRepository;
 import pe.edu.upc.center.creditotiendas.creditmanagement.domain.repositories.CreditSaleRepository;
+import pe.edu.upc.center.creditotiendas.creditmanagement.interfaces.events.CreditSaleRegisteredIntegrationEvent;
 import pe.edu.upc.center.creditotiendas.shared.application.result.ApplicationError;
 import pe.edu.upc.center.creditotiendas.shared.application.result.Result;
 
@@ -30,13 +32,16 @@ public class CreditSaleCommandServiceImpl implements CreditSaleCommandService {
     private final CreditProfileRepository creditProfileRepository;
     private final CreditSaleRepository creditSaleRepository;
     private final ExternalStoreService externalStoreService;
+    private final ApplicationEventPublisher eventPublisher;
 
     public CreditSaleCommandServiceImpl(CreditProfileRepository creditProfileRepository,
                                         CreditSaleRepository creditSaleRepository,
-                                        ExternalStoreService externalStoreService) {
+                                        ExternalStoreService externalStoreService,
+                                        ApplicationEventPublisher eventPublisher) {
         this.creditProfileRepository = creditProfileRepository;
         this.creditSaleRepository = creditSaleRepository;
         this.externalStoreService = externalStoreService;
+        this.eventPublisher = eventPublisher;
     }
 
     @Override
@@ -45,7 +50,12 @@ public class CreditSaleCommandServiceImpl implements CreditSaleCommandService {
                 command.graceDays(), command.items())
                 .flatMap(sale -> {
                     try {
-                        return Result.success(creditSaleRepository.save(sale).getId());
+                        var saved = creditSaleRepository.save(sale);
+                        var profile = creditProfileRepository.findById(saved.getCreditProfileId()).orElseThrow();
+                        eventPublisher.publishEvent(new CreditSaleRegisteredIntegrationEvent(
+                                saved.getId(), saved.getCreditProfileId(), profile.getStoreId(),
+                                saved.paymentPlan().installments()));
+                        return Result.success(saved.getId());
                     } catch (Exception e) {
                         log.error("Error in register-credit-sale", e);
                         return Result.failure(ApplicationError.unexpected("register-credit-sale", "The credit sale could not be registered"));

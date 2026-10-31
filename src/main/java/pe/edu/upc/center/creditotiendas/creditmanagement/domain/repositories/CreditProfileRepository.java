@@ -12,6 +12,7 @@ public interface CreditProfileRepository {
     Optional<CreditProfile> findById(Long id);
     List<CreditProfile> findAllByStoreId(Long storeId);
     List<CreditProfile> findAllByUserId(Long userId);
+    List<CreditProfile> findAllActiveByCutoffDay(int cutoffDay);
     boolean existsByUserIdAndStoreId(Long userId, Long storeId);
     CreditProfile save(CreditProfile creditProfile);
 }

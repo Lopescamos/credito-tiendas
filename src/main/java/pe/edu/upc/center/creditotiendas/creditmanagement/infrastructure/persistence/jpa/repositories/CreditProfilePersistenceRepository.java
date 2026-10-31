@@ -8,5 +8,6 @@ import java.util.List;
 public interface CreditProfilePersistenceRepository extends JpaRepository<CreditProfilePersistenceEntity, Long> {
     List<CreditProfilePersistenceEntity> findAllByStoreIdOrderByIdAsc(Long storeId);
     List<CreditProfilePersistenceEntity> findAllByUserIdOrderByIdAsc(Long userId);
+    List<CreditProfilePersistenceEntity> findAllByActiveTrueAndCutoffDayOrderByIdAsc(int cutoffDay);
     boolean existsByUserIdAndStoreId(Long userId, Long storeId);
 }
