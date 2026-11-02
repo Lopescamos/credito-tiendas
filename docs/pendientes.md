@@ -2,11 +2,6 @@
 
 ## Pendientes activos
 
-- **Push de `feature/credit-management` y de `develop`.** Commiteado y mergeado a `develop`
-  local; falta subir a GitHub (github.com no respondía en el intento previo).
-- **`feature/billing` sin commitear.** El código de Billing (domain, infrastructure,
-  application, interfaces, migración V4, ACL/eventos en Credit Management) ya existe en el
-  working tree pero no se ha hecho ningún commit — ver `docs/estado-billing.md`.
 - **Billing sin tests propios.** Los cálculos los hace la lógica financiera ya probada en
   Credit; para `PaymentCommandServiceImpl` convendría un `@DataJpaTest` o `@SpringBootTest`
   cuando toque. Tampoco hay `@WebMvcTest` de sus controllers.
@@ -25,10 +20,6 @@
   futuro, hay que agregarle su propio `@EventListener`.
 - **Migraciones V1–V4 nunca probadas con Flyway contra PostgreSQL real** (ver el pendiente
   general de abajo — Billing agrega V4 a esa misma brecha).
-- **Crédito disponible v1** (decisión 5 de Credit Management): migrar a límite − capital
-  pendiente ahora que Billing existe y puede dar esa cifra.
-- **Las solicitudes pendientes no reservan crédito.** Un cliente puede enviar varias que juntas
-  superen su límite; la aprobación sí vuelve a validar el límite.
 - **Catálogo visible para cualquier cliente.** Hoy un `CLIENT` ve el catálogo activo de
   cualquier tienda. Debería limitarse a las tiendas donde tiene perfil activo
   (`TODO(credit-management)` en `StoreAuthorization.canViewCatalog`). Resolverlo desde Store
@@ -86,13 +77,21 @@
 - **"Pago íntegro" (US-05/US-10):** un pago cubre cuotas de una sola venta; el cliente no manda
   el monto, el servidor lo calcula desde las cuotas elegidas a la fecha de pago (ver las 6
   decisiones de Billing en `docs/estado-billing.md`).
-
-## Siguiente paso en Billing (al dar luz verde)
-
-Cuando el usuario confirme: actualizar `.claude/CLAUDE.md` si hace falta, hacer los commits
-agrupados (identidad propia del usuario, sin coautoría de Claude — ver
-`commits-sin-coautoria-claude` en memoria), `push` de `feature/billing`, `merge --no-ff` a
-`develop` y `push` de `develop`.
+- **Billing commiteado y publicado.** 3 commits agrupados por capa en `feature/billing`
+  (identidad propia del usuario, sin coautoría de Claude), `merge --no-ff` a `develop`,
+  y los docs de la reestructuración (`chore/restructure-context`) también mergeados a
+  `develop`. Las tres ramas (`feature/billing`, `chore/restructure-context`, `develop`) están
+  al día en GitHub.
+- **Crédito disponible v2.** `CreditProfile.availableCredit` ahora recibe `pendingCapital`
+  (de Billing, vía la nueva `BillingContextFacade`/`ExternalBillingService`) y `reservedCredit`
+  (solicitudes `PENDING` del mismo perfil), en vez de la lista de ventas. Afecta venta directa
+  (US-02), creación y aprobación de solicitud remota (US-08/US-12) y las dos consultas de
+  `CreditProfileQueryServiceImpl`. Detalle en `docs/estado-credit.md` → "Integración con
+  Billing".
+- **Las solicitudes pendientes ahora reservan crédito.** Resuelto como parte del punto
+  anterior: `reservedCredit` suma el `totalAmount` de las solicitudes `PENDING` del perfil
+  (excluyendo la propia solicitud al re-chequear su aprobación), así que varias solicitudes
+  pendientes ya no pueden juntas superar el límite.
 
 ## Siguiente (después de Billing)
 

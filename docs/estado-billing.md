@@ -84,6 +84,15 @@ fórmula financiera.
 `ExternalCreditService` (`billing/application/internal/outboundservices/acl/`) envuelve
 `CreditManagementContextFacade`.
 
+## ACL expuesta a Credit Management
+`billing/interfaces/acl/BillingContextFacade.java` (+
+`billing/application/acl/BillingContextFacadeImpl.java`): `fetchPendingCapitalByCreditProfileId`
+suma el `capital` de toda cuota `PENDING`/`OVERDUE` del perfil. La consume Credit como
+`ExternalBillingService` para calcular el crédito disponible v2 (límite − capital pendiente −
+solicitudes pendientes) — ver "Integración con Billing" en `docs/estado-credit.md`. Es la
+primera vez que existe una dependencia Credit → Billing (antes solo Billing → Credit),
+aceptada como el mismo patrón de ciclo de ACL que IAM ↔ Store.
+
 ## Comprobado con curl
 
 - Venta nueva → evento → 3 cuotas `PENDING` persistidas (`GET /credit-sales/1/installments`).

@@ -3,7 +3,8 @@ package pe.edu.upc.center.creditotiendas.creditmanagement.interfaces.rest.resour
 import java.math.BigDecimal;
 
 /**
- * @param availableCredit credit limit minus the sales not fully paid yet
+ * @param availableCredit credit limit minus the capital still financed (Billing) and the amount reserved
+ *                        by pending purchase requests
  */
 public record CreditProfileResource(
         Long id,

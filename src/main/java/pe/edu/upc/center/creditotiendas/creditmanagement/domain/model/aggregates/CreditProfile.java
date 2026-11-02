@@ -8,7 +8,6 @@ import pe.edu.upc.center.creditotiendas.creditmanagement.domain.model.valueobjec
 import pe.edu.upc.center.creditotiendas.shared.domain.model.aggregates.AbstractDomainAggregateRoot;
 
 import java.math.BigDecimal;
-import java.util.Collection;
 import java.util.Optional;
 
 /**
@@ -75,13 +74,15 @@ public class CreditProfile extends AbstractDomainAggregateRoot<CreditProfile> {
      * US-02 rules for a new credit sale on this profile: the profile is active, the amount fits in the
      * available credit and the term does not exceed the agreed maximum.
      *
-     * @param sales the sales of this profile
+     * @param pendingCapital capital still owed on this profile's unpaid installments (Billing)
+     * @param reservedCredit amount committed by this profile's other pending purchase requests
      * @return why the sale is not allowed, or empty if it is
      */
-    public Optional<String> saleRejectionReason(BigDecimal amount, int termDays, Collection<CreditSale> sales) {
+    public Optional<String> saleRejectionReason(BigDecimal amount, int termDays, BigDecimal pendingCapital,
+                                                BigDecimal reservedCredit) {
         if (!active)
             return Optional.of("Credit profile %d is deactivated and cannot buy on credit".formatted(id));
-        var available = availableCredit(sales);
+        var available = availableCredit(pendingCapital, reservedCredit);
         if (amount.compareTo(available) > 0)
             return Optional.of("Amount %s exceeds the available credit %s of credit profile %d".formatted(amount, available, id));
         if (termDays > maxTermDays)
@@ -90,16 +91,14 @@ public class CreditProfile extends AbstractDomainAggregateRoot<CreditProfile> {
     }
 
     /**
-     * Credit limit minus the amount of this profile's sales that are not fully paid. Never negative:
-     * lowering the limit below the current debt leaves no available credit instead of a negative one.
+     * Credit limit minus the capital still financed (unpaid installments in Billing) and the amount
+     * reserved by this profile's other pending purchase requests. Never negative: lowering the limit below
+     * the current debt leaves no available credit instead of a negative one.
      *
-     * @param sales the sales of this profile
+     * @param pendingCapital capital still owed on this profile's unpaid installments (Billing)
+     * @param reservedCredit amount committed by this profile's other pending purchase requests
      */
-    public BigDecimal availableCredit(Collection<CreditSale> sales) {
-        var outstanding = sales.stream()
-                .filter(sale -> sale.getStatus().isOutstanding())
-                .map(CreditSale::getTotalAmount)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        return creditLimit.subtract(outstanding).max(BigDecimal.ZERO);
+    public BigDecimal availableCredit(BigDecimal pendingCapital, BigDecimal reservedCredit) {
+        return creditLimit.subtract(pendingCapital).subtract(reservedCredit).max(BigDecimal.ZERO);
     }
 }

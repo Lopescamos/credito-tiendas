@@ -4,7 +4,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import pe.edu.upc.center.creditotiendas.creditmanagement.application.commandservices.CreditSaleCommandService;
+import pe.edu.upc.center.creditotiendas.creditmanagement.application.internal.outboundservices.acl.ExternalBillingService;
 import pe.edu.upc.center.creditotiendas.creditmanagement.application.internal.outboundservices.acl.ExternalStoreService;
+import pe.edu.upc.center.creditotiendas.creditmanagement.domain.model.aggregates.CreditPurchaseRequest;
 import pe.edu.upc.center.creditotiendas.creditmanagement.domain.model.aggregates.CreditSale;
 import pe.edu.upc.center.creditotiendas.creditmanagement.domain.model.commands.RegisterCreditSaleCommand;
 import pe.edu.upc.center.creditotiendas.creditmanagement.domain.model.commands.SimulateCreditSaleCommand;
@@ -12,6 +14,7 @@ import pe.edu.upc.center.creditotiendas.creditmanagement.domain.model.entities.S
 import pe.edu.upc.center.creditotiendas.creditmanagement.domain.model.valueobjects.RequestedItem;
 import pe.edu.upc.center.creditotiendas.creditmanagement.domain.model.valueobjects.SaleModalities;
 import pe.edu.upc.center.creditotiendas.creditmanagement.domain.repositories.CreditProfileRepository;
+import pe.edu.upc.center.creditotiendas.creditmanagement.domain.repositories.CreditPurchaseRequestRepository;
 import pe.edu.upc.center.creditotiendas.creditmanagement.domain.repositories.CreditSaleRepository;
 import pe.edu.upc.center.creditotiendas.creditmanagement.interfaces.events.CreditSaleRegisteredIntegrationEvent;
 import pe.edu.upc.center.creditotiendas.shared.application.result.ApplicationError;
@@ -31,16 +34,22 @@ public class CreditSaleCommandServiceImpl implements CreditSaleCommandService {
 
     private final CreditProfileRepository creditProfileRepository;
     private final CreditSaleRepository creditSaleRepository;
+    private final CreditPurchaseRequestRepository purchaseRequestRepository;
     private final ExternalStoreService externalStoreService;
+    private final ExternalBillingService externalBillingService;
     private final ApplicationEventPublisher eventPublisher;
 
     public CreditSaleCommandServiceImpl(CreditProfileRepository creditProfileRepository,
                                         CreditSaleRepository creditSaleRepository,
+                                        CreditPurchaseRequestRepository purchaseRequestRepository,
                                         ExternalStoreService externalStoreService,
+                                        ExternalBillingService externalBillingService,
                                         ApplicationEventPublisher eventPublisher) {
         this.creditProfileRepository = creditProfileRepository;
         this.creditSaleRepository = creditSaleRepository;
+        this.purchaseRequestRepository = purchaseRequestRepository;
         this.externalStoreService = externalStoreService;
+        this.externalBillingService = externalBillingService;
         this.eventPublisher = eventPublisher;
     }
 
@@ -95,12 +104,27 @@ public class CreditSaleCommandServiceImpl implements CreditSaleCommandService {
         }
 
         var total = details.stream().map(SaleDetail::getSubtotal).reduce(BigDecimal.ZERO, BigDecimal::add);
-        var sales = creditSaleRepository.findAllByCreditProfileId(creditProfileId);
-        var rejection = profile.get().saleRejectionReason(total, CreditSale.termDaysOf(graceDays, installmentCount), sales);
+        var pendingCapital = externalBillingService.fetchPendingCapital(creditProfileId);
+        var reservedCredit = reservedCreditFor(creditProfileId, null);
+        var rejection = profile.get().saleRejectionReason(total, CreditSale.termDaysOf(graceDays, installmentCount),
+                pendingCapital, reservedCredit);
         if (rejection.isPresent())
             return Result.failure(ApplicationError.businessRuleViolation("CreditSale", rejection.get()));
 
         return Result.success(CreditSale.register(profile.get(), LocalDate.now(CreditSale.BUSINESS_ZONE),
                 modality, installmentCount, graceDays, details, null));
+    }
+
+    /**
+     * Sum of the total amount of this profile's pending purchase requests, excluding {@code excludedRequestId}
+     * (the request being approved, if any). Pending requests have not yet become a sale, so nothing else
+     * already accounts for the credit they would consume.
+     */
+    private BigDecimal reservedCreditFor(Long creditProfileId, Long excludedRequestId) {
+        return purchaseRequestRepository.findAllByCreditProfileId(creditProfileId).stream()
+                .filter(CreditPurchaseRequest::isPending)
+                .filter(request -> !request.getId().equals(excludedRequestId))
+                .map(CreditPurchaseRequest::getTotalAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 }

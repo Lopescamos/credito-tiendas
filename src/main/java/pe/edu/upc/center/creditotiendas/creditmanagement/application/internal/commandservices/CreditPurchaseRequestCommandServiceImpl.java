@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.interceptor.TransactionAspectSupport;
 import pe.edu.upc.center.creditotiendas.creditmanagement.application.commandservices.CreditPurchaseRequestCommandService;
+import pe.edu.upc.center.creditotiendas.creditmanagement.application.internal.outboundservices.acl.ExternalBillingService;
 import pe.edu.upc.center.creditotiendas.creditmanagement.application.internal.outboundservices.acl.ExternalStoreService;
 import pe.edu.upc.center.creditotiendas.creditmanagement.domain.model.aggregates.CreditProfile;
 import pe.edu.upc.center.creditotiendas.creditmanagement.domain.model.aggregates.CreditPurchaseRequest;
@@ -44,17 +45,20 @@ public class CreditPurchaseRequestCommandServiceImpl implements CreditPurchaseRe
     private final CreditProfileRepository creditProfileRepository;
     private final CreditSaleRepository creditSaleRepository;
     private final ExternalStoreService externalStoreService;
+    private final ExternalBillingService externalBillingService;
     private final ApplicationEventPublisher eventPublisher;
 
     public CreditPurchaseRequestCommandServiceImpl(CreditPurchaseRequestRepository purchaseRequestRepository,
                                                    CreditProfileRepository creditProfileRepository,
                                                    CreditSaleRepository creditSaleRepository,
                                                    ExternalStoreService externalStoreService,
+                                                   ExternalBillingService externalBillingService,
                                                    ApplicationEventPublisher eventPublisher) {
         this.purchaseRequestRepository = purchaseRequestRepository;
         this.creditProfileRepository = creditProfileRepository;
         this.creditSaleRepository = creditSaleRepository;
         this.externalStoreService = externalStoreService;
+        this.externalBillingService = externalBillingService;
         this.eventPublisher = eventPublisher;
     }
 
@@ -83,7 +87,7 @@ public class CreditPurchaseRequestCommandServiceImpl implements CreditPurchaseRe
         }
 
         var total = details.stream().map(PurchaseRequestDetail::getSubtotal).reduce(BigDecimal.ZERO, BigDecimal::add);
-        var ineligibility = checkEligibility(profile.get(), total);
+        var ineligibility = checkEligibility(profile.get(), total, null);
         if (ineligibility.isPresent()) return Result.failure(ineligibility.get());
 
         try {
@@ -114,12 +118,13 @@ public class CreditPurchaseRequestCommandServiceImpl implements CreditPurchaseRe
         if (!externalStoreService.isStoreActive(profile.getStoreId()))
             return Result.failure(ApplicationError.businessRuleViolation(
                     "Store", "Store %d is deactivated and cannot register new sales".formatted(profile.getStoreId())));
-        var ineligibility = checkEligibility(profile, request.get().getTotalAmount());
+        var ineligibility = checkEligibility(profile, request.get().getTotalAmount(), request.get().getId());
         if (ineligibility.isPresent()) return Result.failure(ineligibility.get());
 
-        var sales = creditSaleRepository.findAllByCreditProfileId(profile.getId());
+        var pendingCapital = externalBillingService.fetchPendingCapital(profile.getId());
+        var reservedCredit = reservedCreditFor(profile.getId(), request.get().getId());
         var termDays = CreditSale.termDaysOf(APPROVED_REQUEST_GRACE_DAYS, APPROVED_REQUEST_INSTALLMENTS);
-        var rejection = profile.saleRejectionReason(request.get().getTotalAmount(), termDays, sales);
+        var rejection = profile.saleRejectionReason(request.get().getTotalAmount(), termDays, pendingCapital, reservedCredit);
         if (rejection.isPresent())
             return Result.failure(ApplicationError.businessRuleViolation("CreditSale", rejection.get()));
 
@@ -156,15 +161,33 @@ public class CreditPurchaseRequestCommandServiceImpl implements CreditPurchaseRe
         }
     }
 
-    private Optional<ApplicationError> checkEligibility(CreditProfile profile, BigDecimal amount) {
+    /**
+     * @param excludedRequestId the request itself when re-checking eligibility for an approval (already
+     *                          pending, so it must not be reserved against itself), {@code null} when
+     *                          checking a brand-new request
+     */
+    private Optional<ApplicationError> checkEligibility(CreditProfile profile, BigDecimal amount, Long excludedRequestId) {
         var sales = creditSaleRepository.findAllByCreditProfileId(profile.getId());
+        var pendingCapital = externalBillingService.fetchPendingCapital(profile.getId());
+        var reservedCredit = reservedCreditFor(profile.getId(), excludedRequestId);
         var assessment = PurchaseRequestEligibilityPolicy.assess(
                 profile.isActive(),
                 sales.stream().map(CreditSale::getStatus).toList(),
-                profile.availableCredit(sales),
+                profile.availableCredit(pendingCapital, reservedCredit),
                 amount);
         if (assessment.eligible()) return Optional.empty();
         return Optional.of(ApplicationError.businessRuleViolation("CreditPurchaseRequest",
                 "Credit profile %d is not eligible for a remote purchase request: %s".formatted(profile.getId(), assessment.failures())));
+    }
+
+    /**
+     * Sum of the total amount of this profile's pending purchase requests, excluding {@code excludedRequestId}.
+     */
+    private BigDecimal reservedCreditFor(Long creditProfileId, Long excludedRequestId) {
+        return purchaseRequestRepository.findAllByCreditProfileId(creditProfileId).stream()
+                .filter(CreditPurchaseRequest::isPending)
+                .filter(request -> !request.getId().equals(excludedRequestId))
+                .map(CreditPurchaseRequest::getTotalAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 }

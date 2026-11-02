@@ -8,10 +8,5 @@ public enum CreditSaleStatuses {
     ACTIVE,
     OVERDUE,
     PAID_ON_TIME,
-    PAID_LATE;
-
-    /** Whether the sale still consumes credit limit. */
-    public boolean isOutstanding() {
-        return this == ACTIVE || this == OVERDUE;
-    }
+    PAID_LATE
 }
