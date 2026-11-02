@@ -58,10 +58,7 @@
 
 ## Decisiones abiertas
 
-- **Quién registra clientes:** US-14 dice Admin Sistema crea usuarios; US-04 dice que el
-  cliente se registra presencialmente en la tienda. Hoy solo `SYSTEM_ADMIN` crea usuarios.
-  ¿Admin Tienda puede crear usuarios con rol Cliente? (cambio pequeño en `UsersController` +
-  regla en el command service).
+Ninguna por ahora.
 
 ## Resueltas
 
@@ -94,6 +91,11 @@
 - **El perfil `test` ya no usa el `.env`.** `springdotenv.enabled=false` en
   `application-test.properties` — verificado con el `.env` real del equipo (que sí tiene
   `CLOUDINARY_URL`) sin que se filtre a los tests.
+- **Quién registra clientes.** El Admin Tienda registra a sus propios clientes en persona:
+  `POST /api/v1/users` ahora acepta `STORE_ADMIN` cuando el rol creado es `CLIENT` (nunca
+  `STORE_ADMIN` ni `SYSTEM_ADMIN`), vía el nuevo `IamAuthorization.canCreateUserWithRole`. El
+  resto del flujo (abrir el perfil de crédito, registrar la primera venta, elegibilidad para
+  solicitudes remotas) ya funcionaba así — ver `docs/estado-iam.md`.
 
 ## Siguiente (después de Billing)
 

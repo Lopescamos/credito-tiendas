@@ -14,14 +14,25 @@ strategy genera los nombres de tabla. Migración: `V1__create_iam_tables.sql`.
 
 ## Endpoints
 - `POST /api/v1/authentication/sign-in` — público, devuelve JWT + datos del usuario + `storeIds`
-- `POST|GET /api/v1/users`, `GET|PUT /api/v1/users/{id}`, `PATCH /api/v1/users/{id}/status`,
-  `POST /api/v1/users/{id}/stores`, `DELETE /api/v1/users/{id}/stores/{storeId}` — solo `SYSTEM_ADMIN`
+- `POST /api/v1/users` — `SYSTEM_ADMIN` (cualquier rol asignable) o `STORE_ADMIN` (solo rol
+  `CLIENT`, registro presencial del cliente, US-04). Ver `IamAuthorization.canCreateUserWithRole`.
+- `GET|PUT /api/v1/users/{id}`, `PATCH /api/v1/users/{id}/status`,
+  `POST /api/v1/users/{id}/stores`, `DELETE /api/v1/users/{id}/stores/{storeId}`,
+  `GET /api/v1/users` — solo `SYSTEM_ADMIN`
 - `GET /api/v1/users/me` — cualquier usuario autenticado
 - `GET /api/v1/roles` — solo `SYSTEM_ADMIN`
 
 ## Reglas de negocio
 Email único (normalizado a minúsculas); por API solo se crean `STORE_ADMIN`/`CLIENT`; el
 `SYSTEM_ADMIN` no se puede desactivar; solo un `STORE_ADMIN` activo se vincula a tiendas.
+
+Quién crea a quién (US-14 vs. US-04): `SYSTEM_ADMIN` da de alta tiendas y Admin Tienda; el
+**Admin Tienda registra a sus propios clientes** en persona, creándolos con rol `CLIENT` vía
+`POST /api/v1/users` y, acto seguido, abriéndoles su `Perfil_Credito_Cliente` en su tienda
+(`POST /api/v1/stores/{storeId}/credit-profiles`, ya restringido a `STORE_ADMIN` de esa tienda —
+ver `docs/estado-credit.md`). Un `STORE_ADMIN` nunca puede crear otro `STORE_ADMIN` ni un
+`SYSTEM_ADMIN` por esta vía: `IamAuthorization.canCreateUserWithRole` lo bloquea en el
+`@PreAuthorize` del controller, antes de que la petición llegue al command service.
 
 ## Seeding
 `iamApplicationReadyEventHandler`: 3 roles + Admin Sistema inicial desde `ADMIN_EMAIL`/
