@@ -31,6 +31,11 @@ public class CreditManagementContextFacadeImpl implements CreditManagementContex
     }
 
     @Override
+    public boolean hasActiveProfile(Long userId, Long storeId) {
+        return creditProfileRepository.existsByUserIdAndStoreIdAndActiveTrue(userId, storeId);
+    }
+
+    @Override
     public List<Long> fetchActiveProfileIdsByCutoffDay(int cutoffDay) {
         return creditProfileRepository.findAllActiveByCutoffDay(cutoffDay).stream()
                 .map(CreditProfile::getId)

@@ -12,6 +12,12 @@ public interface CreditManagementContextFacade {
     Optional<CreditProfileSummary> fetchProfileById(Long creditProfileId);
 
     /**
+     * @return whether the user has an active credit profile in the store (used by Store Management
+     *         to restrict a client's catalog view to stores where they are actually a customer)
+     */
+    boolean hasActiveProfile(Long userId, Long storeId);
+
+    /**
      * @return ids of every active credit profile whose cut-off day equals {@code cutoffDay} (used by Billing's
      *         scheduler to generate monthly statements)
      */

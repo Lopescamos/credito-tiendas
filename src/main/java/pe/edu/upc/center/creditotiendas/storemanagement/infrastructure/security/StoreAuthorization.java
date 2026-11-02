@@ -2,6 +2,7 @@ package pe.edu.upc.center.creditotiendas.storemanagement.infrastructure.security
 
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Component;
+import pe.edu.upc.center.creditotiendas.storemanagement.application.internal.outboundservices.acl.ExternalCreditService;
 import pe.edu.upc.center.creditotiendas.storemanagement.application.internal.outboundservices.acl.ExternalIamService;
 import pe.edu.upc.center.creditotiendas.storemanagement.application.queryservices.ProductQueryService;
 import pe.edu.upc.center.creditotiendas.storemanagement.domain.model.aggregates.Product;
@@ -21,10 +22,13 @@ public class StoreAuthorization {
     private static final String ROLE_CLIENT = "ROLE_CLIENT";
 
     private final ExternalIamService externalIamService;
+    private final ExternalCreditService externalCreditService;
     private final ProductQueryService productQueryService;
 
-    public StoreAuthorization(ExternalIamService externalIamService, ProductQueryService productQueryService) {
+    public StoreAuthorization(ExternalIamService externalIamService, ExternalCreditService externalCreditService,
+                              ProductQueryService productQueryService) {
         this.externalIamService = externalIamService;
+        this.externalCreditService = externalCreditService;
         this.productQueryService = productQueryService;
     }
 
@@ -50,15 +54,15 @@ public class StoreAuthorization {
     }
 
     /**
-     * Store admins of the store see the full catalog; clients see the active catalog.
-     * TODO(credit-management): restrict clients to stores where they have an active credit profile.
+     * Store admins of the store see the full catalog; clients see the active catalog, but only for
+     * stores where they are actually a customer (have an active credit profile there).
      */
     public boolean canViewCatalog(Authentication authentication, Long storeId) {
-        return canManageStore(authentication, storeId) || isClient(authentication);
-    }
-
-    public boolean isClient(Authentication authentication) {
-        return hasRole(authentication, ROLE_CLIENT);
+        if (canManageStore(authentication, storeId)) return true;
+        if (!hasRole(authentication, ROLE_CLIENT) || storeId == null) return false;
+        return externalIamService.fetchUserIdByEmail(authentication.getName())
+                .map(userId -> externalCreditService.hasActiveProfile(userId, storeId))
+                .orElse(false);
     }
 
     private boolean hasRole(Authentication authentication, String role) {

@@ -40,6 +40,13 @@ usa en `@PreAuthorize` (`canManageStore`, `canManageProduct`, `canViewCatalog`) 
 vía `ExternalIamService`. Un producto de otra tienda responde 403 (no 404) para no revelar ids
 ajenos.
 
+`canViewCatalog` ya no deja ver el catálogo de cualquier tienda a cualquier `CLIENT`: además de
+`canManageStore`, pregunta a Credit Management (`ExternalCreditService`, bean
+`storeManagementExternalCreditService` por el nombre homónimo en Billing) si el cliente tiene
+un `Perfil_Credito_Cliente` **activo** en esa tienda. Dependencia Store → Credit nueva (antes
+solo existía Credit → Store); aceptada como el mismo patrón de ciclo de ACL que IAM ↔ Store y
+Credit ↔ Billing — ver `docs/estado-credit.md`.
+
 ## Cloudinary
 - El puerto `FileStorageService` (+ `FileStorageException`) está en
   `application/internal/outboundservices` y la implementación plana en

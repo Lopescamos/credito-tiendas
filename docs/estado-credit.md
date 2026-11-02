@@ -112,11 +112,16 @@ usado en crédito disponible v2 — ver "Integración con Billing" abajo.
   re-chequea su aprobación), y pasan `pendingCapital` + `reservedCredit` a
   `CreditProfile.availableCredit(...)`.
 
-## ACL expuestas a Billing
+## ACL expuestas a Billing y a Store Management
 `creditmanagement/interfaces/acl/CreditManagementContextFacade.java` (+ `CreditProfileSummary`)
 y la implementación `creditmanagement/application/acl/CreditManagementContextFacadeImpl.java`.
-Billing la consume como `ExternalCreditService` en
-`billing/application/internal/outboundservices/acl/`.
+- Billing la consume como `ExternalCreditService` en
+  `billing/application/internal/outboundservices/acl/`.
+- Store Management la consume como `ExternalCreditService` (bean
+  `storeManagementExternalCreditService`, nombre explícito por la colisión con el de Billing) en
+  `storemanagement/application/internal/outboundservices/acl/`, solo para `hasActiveProfile`:
+  restringe el catálogo que un `CLIENT` puede ver a las tiendas donde de verdad tiene perfil
+  activo (ver `docs/estado-store.md`).
 
 ## Integration event emitido
 `creditmanagement/interfaces/events/CreditSaleRegisteredIntegrationEvent.java` — se publica al
