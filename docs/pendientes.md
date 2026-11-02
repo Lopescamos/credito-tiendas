@@ -2,9 +2,6 @@
 
 ## Pendientes activos
 
-- **Push de `feature/credit-available-v2`, `bugfix/test-profile-dotenv-leak` y `develop`.**
-  Ambas ramas commiteadas y mergeadas (`--no-ff`) a `develop` local; falta subir las tres a
-  GitHub.
 - **Billing sin tests propios.** Los cálculos los hace la lógica financiera ya probada en
   Credit; para `PaymentCommandServiceImpl` convendría un `@DataJpaTest` o `@SpringBootTest`
   cuando toque. Tampoco hay `@WebMvcTest` de sus controllers.
@@ -96,6 +93,9 @@ Ninguna por ahora.
   `STORE_ADMIN` ni `SYSTEM_ADMIN`), vía el nuevo `IamAuthorization.canCreateUserWithRole`. El
   resto del flujo (abrir el perfil de crédito, registrar la primera venta, elegibilidad para
   solicitudes remotas) ya funcionaba así — ver `docs/estado-iam.md`.
+- **`feature/credit-available-v2`, `bugfix/test-profile-dotenv-leak` y
+  `feature/store-admin-registers-clients` commiteadas, mergeadas (`--no-ff`) a `develop` y
+  pusheadas.** Las cuatro ramas (más `develop`) están al día en GitHub.
 
 ## Siguiente (después de Billing)
 
