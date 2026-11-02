@@ -1,7 +1,8 @@
 # Estado — Credit Management (core domain)
 
-Terminado. Commiteado en `feature/credit-management` y mergeado en `develop` local. 82 tests en
-verde con `./mvnw clean verify`.
+Terminado. Commiteado en `feature/credit-management` y mergeado en `develop` local. El crédito
+disponible v2 (ver decisión 5 y "Integración con Billing" abajo) se hizo en
+`feature/credit-available-v2`, ya mergeada también. 82 tests en verde con `./mvnw clean verify`.
 
 ## Tablas (V3)
 `credit_profiles` (Perfil_Credito_Cliente), `credit_sales` (Venta_Credito, con las 5 columnas

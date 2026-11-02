@@ -2,6 +2,9 @@
 
 ## Pendientes activos
 
+- **Push de `feature/credit-available-v2`, `bugfix/test-profile-dotenv-leak` y `develop`.**
+  Ambas ramas commiteadas y mergeadas (`--no-ff`) a `develop` local; falta subir las tres a
+  GitHub.
 - **Billing sin tests propios.** Los cálculos los hace la lógica financiera ya probada en
   Credit; para `PaymentCommandServiceImpl` convendría un `@DataJpaTest` o `@SpringBootTest`
   cuando toque. Tampoco hay `@WebMvcTest` de sus controllers.

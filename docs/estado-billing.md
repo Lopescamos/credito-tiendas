@@ -1,8 +1,8 @@
 # Estado — Billing
 
-Implementado en la rama `feature/billing` (sin commitear todavía — ver `pendientes.md`). Sin
-tests propios por ahora. `./mvnw clean verify` pasa con 82 tests (los de Credit Management) y
-Flyway aplica `V1..V4` sin problemas en H2.
+Terminado. Commiteado en `feature/billing`, mergeado en `develop` y publicado en GitHub. Sin
+tests propios por ahora (ver `pendientes.md`). `./mvnw clean verify` pasa con 82 tests (los de
+Credit Management) y Flyway aplica `V1..V4` sin problemas en H2.
 
 ## Tablas (V4)
 `installments` (Cuota_Cronograma), `late_fees` (Cargo_Mora), `payments` (Pago_Realizado) +
