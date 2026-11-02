@@ -1,0 +1,99 @@
+# Pendientes y decisiones abiertas
+
+## Pendientes activos
+
+- **Push de `feature/credit-management` y de `develop`.** Commiteado y mergeado a `develop`
+  local; falta subir a GitHub (github.com no respondía en el intento previo).
+- **`feature/billing` sin commitear.** El código de Billing (domain, infrastructure,
+  application, interfaces, migración V4, ACL/eventos en Credit Management) ya existe en el
+  working tree pero no se ha hecho ningún commit — ver `docs/estado-billing.md`.
+- **Billing sin tests propios.** Los cálculos los hace la lógica financiera ya probada en
+  Credit; para `PaymentCommandServiceImpl` convendría un `@DataJpaTest` o `@SpringBootTest`
+  cuando toque. Tampoco hay `@WebMvcTest` de sus controllers.
+- **Account statements sin probar end-to-end.** No se disparó el scheduler desde curl (no hay
+  endpoint para forzarlo). Al correr automático en el `cutoffDay` genera lo esperado; para
+  pruebas ayudaría un endpoint admin que lance los jobs manualmente (útil también para la
+  demo).
+- **Scheduler de Billing no probado end-to-end.** Los cron están configurados y la lógica
+  subyacente se probó con un `UPDATE` directo en la BD, no disparando el `@Scheduled` real.
+- **Fórmula de "purchases del período" en `AccountStatement` es aproximada** (suma de capital
+  de cuotas que vencen en el rango, no el monto real de las ventas registradas en el período).
+  Si se quiere el monto real, hay que exponer eso en la fachada de Credit
+  (`CreditManagementContextFacade`).
+- **Credit no escucha sus propios eventos.** `CreditSaleRegisteredEventHandler` vive en
+  Billing, no en Credit Management. Si Credit necesita reaccionar a sus propios eventos en el
+  futuro, hay que agregarle su propio `@EventListener`.
+- **Migraciones V1–V4 nunca probadas con Flyway contra PostgreSQL real** (ver el pendiente
+  general de abajo — Billing agrega V4 a esa misma brecha).
+- **Crédito disponible v1** (decisión 5 de Credit Management): migrar a límite − capital
+  pendiente ahora que Billing existe y puede dar esa cifra.
+- **Las solicitudes pendientes no reservan crédito.** Un cliente puede enviar varias que juntas
+  superen su límite; la aprobación sí vuelve a validar el límite.
+- **Catálogo visible para cualquier cliente.** Hoy un `CLIENT` ve el catálogo activo de
+  cualquier tienda. Debería limitarse a las tiendas donde tiene perfil activo
+  (`TODO(credit-management)` en `StoreAuthorization.canViewCatalog`). Resolverlo desde Store
+  crearía el ciclo Store ↔ Credit; conviene servir el catálogo del cliente desde Credit.
+- **US-15 (ayuda financiera):** contenido fijo en el frontend, como permite la US.
+- **El perfil `test` local usa el `.env`.** springboot4-dotenv carga el `.env` también con
+  perfil `test`, y la variable de entorno `CLOUDINARY_URL` le gana a `cloudinary.url=` del
+  perfil. Localmente los tests podrían llamar al Cloudinary real (en CI no, porque no hay
+  `.env`). Desactivar dotenv en el perfil `test`.
+- **Subida real a Cloudinary sin probar con imagen válida.** Solo se verificó que Cloudinary
+  rechaza un archivo falso (`Invalid image file`). No se subió una imagen real para no publicar
+  archivos en la cuenta sin permiso.
+- **Migraciones V1–V4 no probadas contra PostgreSQL real.** Solo se validaron en H2 (no hay
+  Postgres local y el daemon de Docker estaba apagado). Probar antes del primer deploy: levantar
+  Postgres en Docker o apuntar a Supabase con perfil `prod`.
+- **Reglas opcionales no aplicadas** (no las pide el enunciado):
+  - dígito verificador del RUC (SUNAT);
+  - precio crédito ≥ precio contado.
+- **Dependencia mutua IAM ↔ Store** vía ACL. IAM pregunta si la tienda está activa; Store
+  pregunta si el usuario está vinculado. No hay ciclo de beans y la app arranca, pero hay que
+  tenerlo presente.
+- **Tests de IAM y de Store Management** no se escribieron (decisión del usuario). Credit sí
+  tiene tests de su lógica financiera, pero no de integración ni de API.
+- **`@DataJpaTest` necesita `@Import(JpaAuditingConfiguration.class)`.** `@EnableJpaAuditing`
+  vive en `shared/infrastructure/persistence/jpa/configuration/JpaAuditingConfiguration`, no en
+  `Main` (en `Main` rompe los `@WebMvcTest`). Los test slices no escanean `@Configuration`, así
+  que sin el `@Import` `createdAt`/`updatedAt` quedan `null` y el insert falla por
+  `nullable = false`. Esto contradice el checklist de la guía ("Main lleva
+  `@EnableJpaAuditing`") a propósito.
+- **Variables nuevas:**
+  - En el `.env` local: `ADMIN_EMAIL` y `ADMIN_PASSWORD` (sin ellas, en dev nadie puede iniciar
+    sesión).
+  - En Render: `CORS_ALLOWED_ORIGINS` (obligatoria en prod, sin default; si falta, la app no
+    arranca), `ADMIN_EMAIL` y `ADMIN_PASSWORD`.
+- **Sin límite de intentos en `/sign-in`** (fuerza bruta). No lo pide el enunciado; mejora
+  opcional.
+
+## Decisiones abiertas
+
+- **Quién registra clientes:** US-14 dice Admin Sistema crea usuarios; US-04 dice que el
+  cliente se registra presencialmente en la tienda. Hoy solo `SYSTEM_ADMIN` crea usuarios.
+  ¿Admin Tienda puede crear usuarios con rol Cliente? (cambio pequeño en `UsersController` +
+  regla en el command service).
+
+## Resueltas
+
+- Idioma: clases en inglés, tablas generadas por la naming strategy.
+- Esquema en prod: Flyway (ver `docs/estado-credit.md` → Flyway, y las migraciones V1-V4).
+- Seguridad configurada en IAM (ya no aparece la contraseña autogenerada de Spring).
+- `references/` ya no existe en el repo.
+- Validar tienda al vincular usuario (IAM ↔ Store) y FK `user_stores.store_id → stores.id`
+  (en V2).
+- Las 6 decisiones de Credit Management (ver `docs/estado-credit.md`).
+- Rutas de docs corregidas (`docs/guia-arquitectura-por-capas-ddd.md`, `docs/modelo-bd.puml`).
+- **"Pago íntegro" (US-05/US-10):** un pago cubre cuotas de una sola venta; el cliente no manda
+  el monto, el servidor lo calcula desde las cuotas elegidas a la fecha de pago (ver las 6
+  decisiones de Billing en `docs/estado-billing.md`).
+
+## Siguiente paso en Billing (al dar luz verde)
+
+Cuando el usuario confirme: actualizar `.claude/CLAUDE.md` si hace falta, hacer los commits
+agrupados (identidad propia del usuario, sin coautoría de Claude — ver
+`commits-sin-coautoria-claude` en memoria), `push` de `feature/billing`, `merge --no-ff` a
+`develop` y `push` de `develop`.
+
+## Siguiente (después de Billing)
+
+- **Audit** (transversal, último BC): `Log_Operacion`, Spring AOP (US-16).
