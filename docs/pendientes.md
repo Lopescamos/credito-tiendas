@@ -25,10 +25,6 @@
   (`TODO(credit-management)` en `StoreAuthorization.canViewCatalog`). Resolverlo desde Store
   crearía el ciclo Store ↔ Credit; conviene servir el catálogo del cliente desde Credit.
 - **US-15 (ayuda financiera):** contenido fijo en el frontend, como permite la US.
-- **El perfil `test` local usa el `.env`.** springboot4-dotenv carga el `.env` también con
-  perfil `test`, y la variable de entorno `CLOUDINARY_URL` le gana a `cloudinary.url=` del
-  perfil. Localmente los tests podrían llamar al Cloudinary real (en CI no, porque no hay
-  `.env`). Desactivar dotenv en el perfil `test`.
 - **Subida real a Cloudinary sin probar con imagen válida.** Solo se verificó que Cloudinary
   rechaza un archivo falso (`Invalid image file`). No se subió una imagen real para no publicar
   archivos en la cuenta sin permiso.
@@ -92,6 +88,9 @@
   anterior: `reservedCredit` suma el `totalAmount` de las solicitudes `PENDING` del perfil
   (excluyendo la propia solicitud al re-chequear su aprobación), así que varias solicitudes
   pendientes ya no pueden juntas superar el límite.
+- **El perfil `test` ya no usa el `.env`.** `springdotenv.enabled=false` en
+  `application-test.properties` — verificado con el `.env` real del equipo (que sí tiene
+  `CLOUDINARY_URL`) sin que se filtre a los tests.
 
 ## Siguiente (después de Billing)
 
