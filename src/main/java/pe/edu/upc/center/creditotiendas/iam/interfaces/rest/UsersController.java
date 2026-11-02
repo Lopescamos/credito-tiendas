@@ -27,7 +27,9 @@ import java.util.List;
 import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 
 /**
- * User management (US-14). Restricted to the system admin, except {@code /me}.
+ * User management (US-14). Restricted to the system admin, except {@code /me} and creating a
+ * user: a store admin may also register their own customers in person (US-04), but only with
+ * role {@code CLIENT} — see {@code IamAuthorization.canCreateUserWithRole}.
  */
 @RestController
 @RequestMapping(value = "/api/v1/users", produces = APPLICATION_JSON_VALUE)
@@ -44,6 +46,8 @@ public class UsersController {
     }
 
     @PostMapping
+    @PreAuthorize("hasAnyRole('SYSTEM_ADMIN', 'STORE_ADMIN') "
+            + "and @iamAuthorization.canCreateUserWithRole(authentication, #resource.role)")
     @Operation(summary = "Create a store admin or client user")
     public ResponseEntity<?> createUser(@Valid @RequestBody CreateUserResource resource) {
         var command = CreateUserCommandFromResourceAssembler.toCommandFromResource(resource);
