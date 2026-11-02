@@ -47,6 +47,32 @@ un `Perfil_Credito_Cliente` **activo** en esa tienda. Dependencia Store → Cred
 solo existía Credit → Store); aceptada como el mismo patrón de ciclo de ACL que IAM ↔ Store y
 Credit ↔ Billing — ver `docs/estado-credit.md`.
 
+## Redis (caché del catálogo activo por tienda)
+- `GetActiveProductsByStoreIdQuery` (lo que ve un `CLIENT` en `GET /stores/{storeId}/products`,
+  US-08) está cacheado con `@Cacheable(cacheNames = "active-products-by-store", key = "#query.storeId()")`
+  en `ProductQueryServiceImpl`. La vista completa de `STORE_ADMIN` (`GetAllProductsByStoreIdQuery`)
+  no se cachea.
+- `ProductCommandServiceImpl` invalida (`cacheManager.getCache(...).evict(storeId)`) al crear un
+  producto, al editarlo, al cambiar su estado y al subirle imagen — las cuatro rutas pasan por
+  `updateProduct`/`handle(CreateProductCommand)`. TTL de respaldo de 10 min
+  (`spring.cache.redis.time-to-live`) por si algo se escapa.
+- `CatalogCacheNames`, `CachingConfiguration` y `CatalogCacheErrorHandler` en
+  `storemanagement/infrastructure/caching/`:
+  - `CachingConfiguration` (`@EnableCaching`) serializa los valores como JSON
+    (`GenericJackson2JsonRedisSerializer`) en vez de serialización Java, así los aggregates de
+    dominio no necesitan implementar `Serializable` solo por esto.
+  - `CatalogCacheErrorHandler` registra el fallo como warning y sigue sin cachear si Redis está
+    caído o mal configurado — un catálogo sin caché sigue respondiendo bien, nunca debe tumbar
+    el request. Por lo mismo, `management.health.redis.enabled=false`: un Redis caído no debe
+    marcar `/actuator/health` (el health check de Render) como DOWN.
+- Dependencias nuevas: `spring-boot-starter-data-redis` + `spring-boot-starter-cache` (Spring
+  Boot 4 las modularizó por separado; `RedisCacheManagerBuilderCustomizer` vive en
+  `org.springframework.boot.cache.autoconfigure`, no en el paquete de `data-redis`).
+- Variables de entorno: `REDIS_HOST` (default `localhost` en todos los perfiles — sin proveedor
+  elegido todavía, ver `docs/pendientes.md`), `REDIS_PORT` (default `6379`), `REDIS_PASSWORD`
+  (default vacío). En el perfil `test`, `spring.cache.type=none` — los tests nunca dependen de
+  un Redis real.
+
 ## Cloudinary
 - El puerto `FileStorageService` (+ `FileStorageException`) está en
   `application/internal/outboundservices` y la implementación plana en

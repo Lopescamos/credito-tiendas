@@ -1,6 +1,7 @@
 package pe.edu.upc.center.creditotiendas.storemanagement.application.internal.commandservices;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.CacheManager;
 import org.springframework.stereotype.Service;
 import pe.edu.upc.center.creditotiendas.shared.application.result.ApplicationError;
 import pe.edu.upc.center.creditotiendas.shared.application.result.Result;
@@ -15,6 +16,7 @@ import pe.edu.upc.center.creditotiendas.storemanagement.domain.model.commands.Up
 import pe.edu.upc.center.creditotiendas.storemanagement.domain.repositories.MeasurementUnitRepository;
 import pe.edu.upc.center.creditotiendas.storemanagement.domain.repositories.ProductRepository;
 import pe.edu.upc.center.creditotiendas.storemanagement.domain.repositories.StoreRepository;
+import pe.edu.upc.center.creditotiendas.storemanagement.infrastructure.caching.CatalogCacheNames;
 
 import java.util.Optional;
 import java.util.function.Function;
@@ -32,15 +34,18 @@ public class ProductCommandServiceImpl implements ProductCommandService {
     private final StoreRepository storeRepository;
     private final MeasurementUnitRepository measurementUnitRepository;
     private final FileStorageService fileStorageService;
+    private final CacheManager cacheManager;
 
     public ProductCommandServiceImpl(ProductRepository productRepository,
                                      StoreRepository storeRepository,
                                      MeasurementUnitRepository measurementUnitRepository,
-                                     FileStorageService fileStorageService) {
+                                     FileStorageService fileStorageService,
+                                     CacheManager cacheManager) {
         this.productRepository = productRepository;
         this.storeRepository = storeRepository;
         this.measurementUnitRepository = measurementUnitRepository;
         this.fileStorageService = fileStorageService;
+        this.cacheManager = cacheManager;
     }
 
     /**
@@ -59,7 +64,9 @@ public class ProductCommandServiceImpl implements ProductCommandService {
         if (unitError.isPresent()) return Result.failure(unitError.get());
 
         try {
-            return Result.success(productRepository.save(new Product(command)).getId());
+            var saved = productRepository.save(new Product(command));
+            evictCatalogCache(saved.getStoreId());
+            return Result.success(saved.getId());
         } catch (Exception e) {
             log.error("Error in create-product", e);
             return Result.failure(ApplicationError.unexpected("create-product", "The product could not be created"));
@@ -108,16 +115,28 @@ public class ProductCommandServiceImpl implements ProductCommandService {
         return Optional.empty();
     }
 
+    /**
+     * Applies {@code change}, saves it and evicts the catalog cache of the product's store — covers
+     * {@link UpdateProductCommand}, {@link UpdateProductStatusCommand} and
+     * {@link UploadProductImageCommand}, all of which can change what the cached catalog shows.
+     */
     private Result<Product, ApplicationError> updateProduct(Long productId, String context,
                                                             Function<Product, Product> change) {
         var product = productRepository.findById(productId);
         if (product.isEmpty())
             return Result.failure(ApplicationError.notFound("Product", productId.toString()));
         try {
-            return Result.success(productRepository.save(change.apply(product.get())));
+            var saved = productRepository.save(change.apply(product.get()));
+            evictCatalogCache(saved.getStoreId());
+            return Result.success(saved);
         } catch (Exception e) {
             log.error("Error in {}", context, e);
             return Result.failure(ApplicationError.unexpected(context, "The product could not be updated"));
         }
+    }
+
+    private void evictCatalogCache(Long storeId) {
+        var cache = cacheManager.getCache(CatalogCacheNames.ACTIVE_PRODUCTS_BY_STORE);
+        if (cache != null) cache.evict(storeId);
     }
 }

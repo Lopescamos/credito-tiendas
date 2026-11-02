@@ -2,6 +2,12 @@
 
 ## Pendientes activos
 
+- **Redis sin proveedor elegido.** El código ya está listo (ver "Redis" en
+  `docs/estado-store.md`): `REDIS_HOST`/`REDIS_PORT`/`REDIS_PASSWORD` con default `localhost` en
+  todos los perfiles, así que la app arranca igual sin Redis real (solo no cachea). Falta elegir
+  un proveedor (Render Key Value, Upstash, etc.) y setear las variables en Render antes del
+  primer deploy — hasta entonces no hay caché real en prod, solo en local si se corre Redis en
+  Docker.
 - **Billing sin tests propios.** Los cálculos los hace la lógica financiera ya probada en
   Credit; para `PaymentCommandServiceImpl` convendría un `@DataJpaTest` o `@SpringBootTest`
   cuando toque. Tampoco hay `@WebMvcTest` de sus controllers.
