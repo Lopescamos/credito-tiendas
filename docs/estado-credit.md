@@ -41,8 +41,10 @@ calculados aparte con Python `Decimal`):
 ## Modelo
 - `CreditProfile`: un perfil por cliente y tienda (409).
   - `saleRejectionReason`: perfil activo, monto ≤ crédito disponible, plazo ≤ máximo.
-  - `availableCredit` = límite − total de ventas no pagadas, nunca negativo (ver v1 en
-    `pendientes.md`).
+  - `availableCredit(pendingCapital, reservedCredit)` = límite − capital pendiente (de Billing)
+    − reservado por solicitudes pendientes, nunca negativo (v2, ver decisión 5 abajo). El
+    cálculo ya no vive en el aggregate solo con las ventas: recibe los dos montos ya sumados
+    por la capa de aplicación.
 - `CreditSale.register` copia las tasas del perfil (snapshot) y calcula `C'` y `R`.
   - `paymentPlan()` se recalcula siempre desde el snapshot, nunca desde el perfil.
 - `CreditPurchaseRequest`: PENDING → APPROVED (con `generatedSaleId`) o REJECTED (con motivo
@@ -57,9 +59,10 @@ calculados aparte con Python `Decimal`):
 4. Una solicitud aprobada siempre es pago único sin gracia, con los precios de la solicitud y
    las tasas vigentes del perfil al aprobar. El cliente nunca pide en cuotas desde la app
    (alcance intencional).
-5. Crédito disponible v1 = límite − total de ventas no pagadas. Subestima y nunca sobrestima,
-   así que es seguro para el comercio. Pendiente pasar a límite − capital pendiente cuando
-   exista Billing (ver `pendientes.md`).
+5. Crédito disponible v2 = límite − capital pendiente de cuotas no pagadas (Billing) − monto de
+   las solicitudes de compra remota aún pendientes (US-08) del mismo perfil. Reemplaza a v1
+   (límite − total de ventas no pagadas): v1 subestimaba al contar el total de una venta aunque
+   ya se hubieran pagado cuotas, y no reservaba crédito para solicitudes aún no respondidas.
 6. `sale_date` es DATE con la fecha de Lima (`CreditSale.BUSINESS_ZONE`); la hora exacta queda
    en `created_at`.
 - Las tasas se guardan como porcentaje anual `DECIMAL(10,7)` (45.0000000 = 45 %).
@@ -89,7 +92,24 @@ cliente.
 
 ## ACL consumidas
 `creditManagementExternalStoreService` y `creditManagementExternalIamService`. Llevan nombre de
-bean explícito porque IAM y Store tienen clases homónimas.
+bean explícito porque IAM y Store tienen clases homónimas. `ExternalBillingService`
+(sin colisión de nombre) consume `BillingContextFacade` de Billing para el capital pendiente
+usado en crédito disponible v2 — ver "Integración con Billing" abajo.
+
+## Integración con Billing (crédito disponible v2 y reserva de solicitudes)
+- `billing/interfaces/acl/BillingContextFacade.java` (+ `billing/application/acl/BillingContextFacadeImpl.java`)
+  expone `fetchPendingCapitalByCreditProfileId`: suma el `capital` de toda cuota `PENDING`/`OVERDUE`
+  del perfil (vía `InstallmentRepository.findAllUnpaidByCreditProfileId`, ya existente en Billing).
+- Credit la consume como `ExternalBillingService` en
+  `creditmanagement/application/internal/outboundservices/acl/`. Esto crea una dependencia
+  Credit → Billing (antes solo existía Billing → Credit), aceptada a propósito como el mismo
+  tipo de ciclo de ACL que ya hay entre IAM ↔ Store: no hay ciclo de beans de Spring porque
+  ninguna de las dos fachadas depende de la otra.
+- `CreditSaleCommandServiceImpl`, `CreditProfileQueryServiceImpl` y
+  `CreditPurchaseRequestCommandServiceImpl` calculan `reservedCredit` sumando el `totalAmount`
+  de las solicitudes `PENDING` del mismo perfil (excluyendo la propia solicitud cuando se
+  re-chequea su aprobación), y pasan `pendingCapital` + `reservedCredit` a
+  `CreditProfile.availableCredit(...)`.
 
 ## ACL expuestas a Billing
 `creditmanagement/interfaces/acl/CreditManagementContextFacade.java` (+ `CreditProfileSummary`)

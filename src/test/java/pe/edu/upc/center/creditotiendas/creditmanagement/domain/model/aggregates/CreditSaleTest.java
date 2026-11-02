@@ -49,23 +49,15 @@ class CreditSaleTest {
     }
 
     @Test
-    void availableCreditOnlyCountsSalesNotFullyPaidAndIsNeverNegative() {
+    void availableCreditSubtractsPendingCapitalAndReservedCreditAndIsNeverNegative() {
         var profile = profile(new BigDecimal("24"), new BigDecimal("1000"));
-        var active = sale(profile, "300.00", CreditSaleStatuses.ACTIVE);
-        var overdue = sale(profile, "200.00", CreditSaleStatuses.OVERDUE);
-        var paid = sale(profile, "900.00", CreditSaleStatuses.PAID_ON_TIME);
 
-        assertThat(profile.availableCredit(List.of(active, overdue, paid))).isEqualByComparingTo("500.00");
+        assertThat(profile.availableCredit(new BigDecimal("300.00"), new BigDecimal("200.00")))
+                .isEqualByComparingTo("500.00");
 
         profile.setCreditLimit(new BigDecimal("400.00"));
-        assertThat(profile.availableCredit(List.of(active, overdue))).isEqualByComparingTo("0");
-    }
-
-    private static CreditSale sale(CreditProfile profile, String amount, CreditSaleStatuses status) {
-        var sale = CreditSale.register(profile, SALE_DATE, SaleModalities.SINGLE_PAYMENT, 1, 0,
-                List.of(new SaleDetail(1L, BigDecimal.ONE, new BigDecimal(amount))), null);
-        sale.setStatus(status);
-        return sale;
+        assertThat(profile.availableCredit(new BigDecimal("300.00"), new BigDecimal("200.00")))
+                .isEqualByComparingTo("0");
     }
 
     private static CreditProfile profile(BigDecimal ratePercentage, BigDecimal creditLimit) {
