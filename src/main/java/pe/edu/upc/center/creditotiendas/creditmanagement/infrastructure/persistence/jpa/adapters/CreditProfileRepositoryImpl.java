@@ -45,6 +45,11 @@ public class CreditProfileRepositoryImpl implements CreditProfileRepository {
     }
 
     @Override
+    public boolean existsByUserIdAndStoreIdAndActiveTrue(Long userId, Long storeId) {
+        return persistenceRepository.existsByUserIdAndStoreIdAndActiveTrue(userId, storeId);
+    }
+
+    @Override
     public CreditProfile save(CreditProfile aggregate) {
         var saved = persistenceRepository.save(CreditProfilePersistenceAssembler.toPersistenceFromDomain(aggregate));
         return CreditProfilePersistenceAssembler.toDomainFromPersistence(saved);

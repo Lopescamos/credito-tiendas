@@ -10,4 +10,5 @@ public interface CreditProfilePersistenceRepository extends JpaRepository<Credit
     List<CreditProfilePersistenceEntity> findAllByUserIdOrderByIdAsc(Long userId);
     List<CreditProfilePersistenceEntity> findAllByActiveTrueAndCutoffDayOrderByIdAsc(int cutoffDay);
     boolean existsByUserIdAndStoreId(Long userId, Long storeId);
+    boolean existsByUserIdAndStoreIdAndActiveTrue(Long userId, Long storeId);
 }

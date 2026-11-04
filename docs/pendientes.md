@@ -2,6 +2,12 @@
 
 ## Pendientes activos
 
+- **Redis sin proveedor elegido.** El código ya está listo (ver "Redis" en
+  `docs/estado-store.md`): `REDIS_HOST`/`REDIS_PORT`/`REDIS_PASSWORD` con default `localhost` en
+  todos los perfiles, así que la app arranca igual sin Redis real (solo no cachea). Falta elegir
+  un proveedor (Render Key Value, Upstash, etc.) y setear las variables en Render antes del
+  primer deploy — hasta entonces no hay caché real en prod, solo en local si se corre Redis en
+  Docker.
 - **Billing sin tests propios.** Los cálculos los hace la lógica financiera ya probada en
   Credit; para `PaymentCommandServiceImpl` convendría un `@DataJpaTest` o `@SpringBootTest`
   cuando toque. Tampoco hay `@WebMvcTest` de sus controllers.
@@ -20,10 +26,6 @@
   futuro, hay que agregarle su propio `@EventListener`.
 - **Migraciones V1–V4 nunca probadas con Flyway contra PostgreSQL real** (ver el pendiente
   general de abajo — Billing agrega V4 a esa misma brecha).
-- **Catálogo visible para cualquier cliente.** Hoy un `CLIENT` ve el catálogo activo de
-  cualquier tienda. Debería limitarse a las tiendas donde tiene perfil activo
-  (`TODO(credit-management)` en `StoreAuthorization.canViewCatalog`). Resolverlo desde Store
-  crearía el ciclo Store ↔ Credit; conviene servir el catálogo del cliente desde Credit.
 - **US-15 (ayuda financiera):** contenido fijo en el frontend, como permite la US.
 - **Subida real a Cloudinary sin probar con imagen válida.** Solo se verificó que Cloudinary
   rechaza un archivo falso (`Invalid image file`). No se subió una imagen real para no publicar
@@ -96,6 +98,10 @@ Ninguna por ahora.
 - **`feature/credit-available-v2`, `bugfix/test-profile-dotenv-leak` y
   `feature/store-admin-registers-clients` commiteadas, mergeadas (`--no-ff`) a `develop` y
   pusheadas.** Las cuatro ramas (más `develop`) están al día en GitHub.
+- **Catálogo visible para cualquier cliente.** `canViewCatalog` ya pregunta a Credit Management
+  (`hasActiveProfile`, nuevo ACL Store → Credit) si el `CLIENT` tiene un perfil activo en esa
+  tienda, en vez de dejarlo ver el catálogo de cualquiera. Ver "Aislamiento multi-tenant" en
+  `docs/estado-store.md`.
 
 ## Siguiente (después de Billing)
 
