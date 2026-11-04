@@ -102,6 +102,12 @@ Ninguna por ahora.
   (`hasActiveProfile`, nuevo ACL Store → Credit) si el `CLIENT` tiene un perfil activo en esa
   tienda, en vez de dejarlo ver el catálogo de cualquiera. Ver "Aislamiento multi-tenant" en
   `docs/estado-store.md`.
+- **Caché Redis del catálogo activo por tienda.** `spring-boot-starter-data-redis` +
+  `spring-boot-starter-cache`; `@Cacheable` en `GetActiveProductsByStoreIdQuery` con
+  invalidación por evento en `ProductCommandServiceImpl` + TTL de respaldo de 10 min. Tolerante
+  a Redis caído (`CatalogCacheErrorHandler`). Ver "Redis" en `docs/estado-store.md`.
+- **`feature/catalog-visibility-by-credit-profile` commiteada (2 commits), mergeada (`--no-ff`)
+  a `develop` y pusheada.** Las seis ramas (más `develop`) están al día en GitHub.
 
 ## Siguiente (después de Billing)
 
