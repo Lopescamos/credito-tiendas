@@ -2,6 +2,14 @@
 
 ## Pendientes activos
 
+- **Audit sin tests de integración/API.** Solo tiene tests unitarios puros del aspect y del
+  aggregate (`OperationAuditAspectClassifyTest`, `OperationLogTest`). Falta `@DataJpaTest` del
+  adapter con la `Specification` dinámica, y `@WebMvcTest` del controller con los filtros y la
+  restricción a `SYSTEM_ADMIN`. Mismo estado que Billing.
+- **Audit en `feature/audit`, sin mergear a `develop` ni pushear.** El BC completo (migración
+  V5, dominio, infraestructura JPA, aspect, servicios, controller y tests unitarios) está
+  commiteado en la rama; `./mvnw clean verify` en verde. Falta merge `--no-ff` a `develop` y
+  push.
 - **Redis sin proveedor elegido.** El código ya está listo (ver "Redis" en
   `docs/estado-store.md`): `REDIS_HOST`/`REDIS_PORT`/`REDIS_PASSWORD` con default `localhost` en
   todos los perfiles, así que la app arranca igual sin Redis real (solo no cachea). Falta elegir
@@ -24,13 +32,11 @@
 - **Credit no escucha sus propios eventos.** `CreditSaleRegisteredEventHandler` vive en
   Billing, no en Credit Management. Si Credit necesita reaccionar a sus propios eventos en el
   futuro, hay que agregarle su propio `@EventListener`.
-- **Migraciones V1–V4 nunca probadas con Flyway contra PostgreSQL real** (ver el pendiente
-  general de abajo — Billing agrega V4 a esa misma brecha).
 - **US-15 (ayuda financiera):** contenido fijo en el frontend, como permite la US.
 - **Subida real a Cloudinary sin probar con imagen válida.** Solo se verificó que Cloudinary
   rechaza un archivo falso (`Invalid image file`). No se subió una imagen real para no publicar
   archivos en la cuenta sin permiso.
-- **Migraciones V1–V4 no probadas contra PostgreSQL real.** Solo se validaron en H2 (no hay
+- **Migraciones V1–V5 no probadas contra PostgreSQL real.** Solo se validaron en H2 (no hay
   Postgres local y el daemon de Docker estaba apagado). Probar antes del primer deploy: levantar
   Postgres en Docker o apuntar a Supabase con perfil `prod`.
 - **Reglas opcionales no aplicadas** (no las pide el enunciado):
@@ -62,7 +68,7 @@ Ninguna por ahora.
 ## Resueltas
 
 - Idioma: clases en inglés, tablas generadas por la naming strategy.
-- Esquema en prod: Flyway (ver `docs/estado-credit.md` → Flyway, y las migraciones V1-V4).
+- Esquema en prod: Flyway (ver `docs/estado-credit.md` → Flyway, y las migraciones V1-V5).
 - Seguridad configurada en IAM (ya no aparece la contraseña autogenerada de Spring).
 - `references/` ya no existe en el repo.
 - Validar tienda al vincular usuario (IAM ↔ Store) y FK `user_stores.store_id → stores.id`
@@ -109,6 +115,10 @@ Ninguna por ahora.
 - **`feature/catalog-visibility-by-credit-profile` commiteada (2 commits), mergeada (`--no-ff`)
   a `develop` y pusheada.** Las seis ramas (más `develop`) están al día en GitHub.
 
-## Siguiente (después de Billing)
+## Siguiente
 
-- **Audit** (transversal, último BC): `Log_Operacion`, Spring AOP (US-16).
+Los 5 bounded contexts del enunciado están construidos. Mejoras y cierre:
+- Merge y push de `feature/audit` cuando se dé la luz verde.
+- Deuda de tests pendiente (ver pendientes activos arriba).
+- Elegir proveedor Redis y setear `REDIS_HOST` en Render antes del primer deploy a prod.
+- Probar `V1-V5` contra PostgreSQL real.
