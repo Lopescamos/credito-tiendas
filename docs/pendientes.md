@@ -6,10 +6,6 @@
   aggregate (`OperationAuditAspectClassifyTest`, `OperationLogTest`). Falta `@DataJpaTest` del
   adapter con la `Specification` dinámica, y `@WebMvcTest` del controller con los filtros y la
   restricción a `SYSTEM_ADMIN`. Mismo estado que Billing.
-- **Audit en `feature/audit`, sin mergear a `develop` ni pushear.** El BC completo (migración
-  V5, dominio, infraestructura JPA, aspect, servicios, controller y tests unitarios) está
-  commiteado en la rama; `./mvnw clean verify` en verde. Falta merge `--no-ff` a `develop` y
-  push.
 - **Redis sin proveedor elegido.** El código ya está listo (ver "Redis" en
   `docs/estado-store.md`): `REDIS_HOST`/`REDIS_PORT`/`REDIS_PASSWORD` con default `localhost` en
   todos los perfiles, así que la app arranca igual sin Redis real (solo no cachea). Falta elegir
@@ -114,11 +110,12 @@ Ninguna por ahora.
   a Redis caído (`CatalogCacheErrorHandler`). Ver "Redis" en `docs/estado-store.md`.
 - **`feature/catalog-visibility-by-credit-profile` commiteada (2 commits), mergeada (`--no-ff`)
   a `develop` y pusheada.** Las seis ramas (más `develop`) están al día en GitHub.
+- **`feature/audit` commiteada (5 commits agrupados por capa), mergeada (`--no-ff`) a
+  `develop` y pusheada.** Cierra los 5 BCs del enunciado (US-16).
 
 ## Siguiente
 
 Los 5 bounded contexts del enunciado están construidos. Mejoras y cierre:
-- Merge y push de `feature/audit` cuando se dé la luz verde.
 - Deuda de tests pendiente (ver pendientes activos arriba).
 - Elegir proveedor Redis y setear `REDIS_HOST` en Render antes del primer deploy a prod.
 - Probar `V1-V5` contra PostgreSQL real.
